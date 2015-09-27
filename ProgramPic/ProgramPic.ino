@@ -1,5 +1,5 @@
 /*
-* Copyright (C) 2012 Southern Storm Software, Pty Ltd.
+* Copyright (C) 2014 www.pikoder.com (Gregor Schlechtriem)
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -13,6 +13,12 @@
 *
 * You should have received a copy of the GNU General Public License
 * along with this program. If not, see <http://www.gnu.org/licenses/>.
+*
+*
+* Change log:
+* 02/09/14:  - added PIC16F684
+*            - revised program version to 1.1 (s_Version)
+*
 */
 #define __PROG_TYPES_COMPAT__
 #include <avr/pgmspace.h> // For PROGMEM
@@ -74,6 +80,10 @@ unsigned long reservedEnd = 0x07FF;
 unsigned int configSave = 0x0000;
 byte progFlashType = FLASH4;
 byte dataFlashType = EEPROM;
+
+// Program version
+const char s_Version[] = "1.1";
+
 // Device names, forced out into PROGMEM.
 const char s_pic12f629[] PROGMEM = "pic12f629";
 const char s_pic12f675[] PROGMEM = "pic12f675";
@@ -88,6 +98,7 @@ const char s_pic16f627a[] PROGMEM = "pic16f627a";
 const char s_pic16f628[] PROGMEM = "pic16f628";
 const char s_pic16f628a[] PROGMEM = "pic16f628a";
 const char s_pic16f648a[] PROGMEM = "pic16f648a";
+const char s_pic16f684[] PROGMEM = "pic16f684";
 const char s_pic16f882[] PROGMEM = "pic16f882";
 const char s_pic16f883[] PROGMEM = "pic16f883";
 const char s_pic16f884[] PROGMEM = "pic16f884";
@@ -129,6 +140,8 @@ struct deviceInfo const devices[] PROGMEM = {
 {s_pic16f628, 0x07C0, 2048, 0x2000, 0x2100, 8, 128, 0, 0, FLASH, EEPROM},
 {s_pic16f628a, 0x1060, 2048, 0x2000, 0x2100, 8, 128, 0, 0, FLASH4, EEPROM},
 {s_pic16f648a, 0x1100, 4096, 0x2000, 0x2100, 8, 256, 0, 0, FLASH4, EEPROM},
+// http://ww1.microchip.com/downloads/en/devicedoc/41202C.pdf
+{s_pic16f684, 0x1080, 2048, 0x2000, 0x2100, 8, 256, 0, 0, FLASH4, EEPROM},
 // http://ww1.microchip.com/downloads/en/DeviceDoc/41287D.pdf
 {s_pic16f882, 0x2000, 2048, 0x2000, 0x2100, 9, 128, 0, 0, FLASH4, EEPROM},
 {s_pic16f883, 0x2020, 4096, 0x2000, 0x2100, 9, 256, 0, 0, FLASH4, EEPROM},
@@ -228,7 +241,8 @@ Serial.print(ch);
 // PROGRAM_PIC_VERSION command.
 void cmdVersion(const char *args)
 {
-Serial.println("ProgramPIC 1.0");
+Serial.print("ProgramPIC ");
+Serial.println(s_Version);
 }
 // Initialize device properties from the "devices" list and
 // print them to the serial port. Note: "dev" is in PROGMEM.
@@ -387,35 +401,35 @@ Serial.print('*');
 Serial.println();
 Serial.println(".");
 }
+
+
 // SETDEVICE command.
-void cmdSetDevice(const char *args)
-{
+void cmdSetDevice(const char *args) {
 // Extract the name of the device from the command arguments.
-int len = 0;
-for (;;) {
-char ch = args[len];
-if (ch == '\0' || ch == ' ' || ch == '\t')
-break;
-++len;
+  int len = 0;
+  for (;;) {
+    char ch = args[len];
+    if (ch == '\0' || ch == ' ' || ch == '\t')  break;
+    ++len;
+  }
+  // Look for the name in the devices list.
+  int index = 0;
+  for (;;) {
+    const prog_char *name = (const prog_char *)(pgm_read_word(&(devices[index].name)));
+    if (!name) break;
+    if (matchString(name, args, len)) {
+      Serial.println("OK");
+      initDevice(&(devices[index]));
+      Serial.println(".");
+      exitProgramMode(); // Force a reset upon the next command.
+      return;
+    }
+    ++index;
+  }
+  Serial.println("ERROR");
 }
-// Look for the name in the devices list.
-int index = 0;
-for (;;) {
-const prog_char *name = (const prog_char *)
-(pgm_read_word(&(devices[index].name)));
-if (!name)
-break;
-if (matchString(name, args, len)) {
-Serial.println("OK");
-initDevice(&(devices[index]));
-Serial.println(".");
-exitProgramMode(); // Force a reset upon the next command.
-return;
-}
-++index;
-}
-Serial.println("ERROR");
-}
+
+
 int parseHex(const char *args, unsigned long *value)
 {
 int size = 0;
