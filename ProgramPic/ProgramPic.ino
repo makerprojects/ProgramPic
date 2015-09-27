@@ -16,6 +16,9 @@
 *
 *
 * Change log:
+* 05/31/15:  - added support for pic 16f877 according to git_hub
+*              check also: https://github.com/alchemycs/ardpicprog/commit/a991b2f0616cfac586a0603570169ce457172987
+*            - revised program version to 1.3 (s_Version)
 * 03/30/15:  - added PIC16F690
 *            - revised program version to 1.2 (s_Version)
 * 02/09/14:  - added PIC16F684
@@ -84,7 +87,7 @@ byte progFlashType = FLASH4;
 byte dataFlashType = EEPROM;
 
 // Program version
-const char s_Version[] = "1.2";
+const char s_Version[] = "1.3";
 
 // Device names, forced out into PROGMEM.
 const char s_pic12f629[] PROGMEM = "pic12f629";
@@ -102,6 +105,7 @@ const char s_pic16f628a[] PROGMEM = "pic16f628a";
 const char s_pic16f648a[] PROGMEM = "pic16f648a";
 const char s_pic16f684[] PROGMEM = "pic16f684";
 const char s_pic16f690[] PROGMEM = "pic16f690";
+const char s_pic16f877[] PROGMEM = "pic16f877";
 const char s_pic16f882[] PROGMEM = "pic16f882";
 const char s_pic16f883[] PROGMEM = "pic16f883";
 const char s_pic16f884[] PROGMEM = "pic16f884";
@@ -147,7 +151,9 @@ struct deviceInfo const devices[] PROGMEM = {
 {s_pic16f684, 0x1080, 2048, 0x2000, 0x2100, 8, 256, 0, 0, FLASH4, EEPROM},
 // http://ww1.microchip.com/downloads/en/DeviceDoc/41262A.pdf
 {s_pic16f690, 0x1400, 4096, 0x2000, 0x2100, 9, 256, 1, 0, FLASH4, EEPROM},
-// http://ww1.microchip.com/downloads/en/DeviceDoc/41287D.pdf
+// http://ww1.microchip.com/downloads/en/DeviceDoc/39025f.pdf
+{s_pic16f877, 0x09A0, 8192, 0x2000, 0x2100, 8, 256, 0, 0, FLASH4, EEPROM },
+// http://ww1.microchip.com/downloads/en/DeviceDoc/41287D.pdf   
 {s_pic16f882, 0x2000, 2048, 0x2000, 0x2100, 9, 128, 0, 0, FLASH4, EEPROM},
 {s_pic16f883, 0x2020, 4096, 0x2000, 0x2100, 9, 256, 0, 0, FLASH4, EEPROM},
 {s_pic16f884, 0x2040, 4096, 0x2000, 0x2100, 9, 256, 0, 0, FLASH4, EEPROM},
