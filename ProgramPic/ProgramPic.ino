@@ -1,5 +1,5 @@
 /*
-* Copyright (C) 2014-2015 www.pikoder.com (Gregor Schlechtriem)
+* Copyright (C) 2014-2016 www.pikoder.com (Gregor Schlechtriem)
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -16,6 +16,7 @@
 *
 *
 * Change log:
+* 01/30/16:  - added new mode to initiate programming for 16F87 and 16F88
 * 05/31/15:  - added support for pic 16f877 according to git_hub
 *              check also: https://github.com/alchemycs/ardpicprog/commit/a991b2f0616cfac586a0603570169ce457172987
 *            - revised program version to 1.3 (s_Version)
@@ -72,6 +73,10 @@ int state = STATE_IDLE;
 #define FLASH 1
 #define FLASH4 4
 #define FLASH5 5
+// HPP programming entry modes
+#define MCLR_first 0
+#define Vdd_first 1
+
 unsigned long pc = 0; // Current program counter.
 // Flat address ranges for the various memory spaces. Defaults to the values
 // for the PIC16F628A. "DEVICE" command updates to the correct values later.
@@ -85,9 +90,10 @@ unsigned long reservedEnd = 0x07FF;
 unsigned int configSave = 0x0000;
 byte progFlashType = FLASH4;
 byte dataFlashType = EEPROM;
+byte hpp_progEntryMode = MCLR_first; 
 
 // Program version
-const char s_Version[] = "1.3";
+const char s_Version[] = "1.4";
 
 // Device names, forced out into PROGMEM.
 const char s_pic12f629[] PROGMEM = "pic12f629";
@@ -114,8 +120,8 @@ const char s_pic16f887[] PROGMEM = "pic16f887";
 // List of devices that are currently supported and their properties.
 // Note: most of these are based on published information and have not
 // been tested by the author. Patches welcome to improve the list.
-struct deviceInfo
-{
+
+struct deviceInfo {
 const prog_char *name; // User-readable name of the device.
 prog_int16_t deviceId; // Device ID for the PIC (-1 if no id).
 prog_uint32_t programSize; // Size of program memory (words).
@@ -127,39 +133,41 @@ prog_uint16_t reservedWords;// Reserved program words (e.g. for OSCCAL).
 prog_uint16_t configSave; // Bits in config word to be saved.
 prog_uint8_t progFlashType; // Type of flash for program memory.
 prog_uint8_t dataFlashType; // Type of flash for data memory.
+prog_uint8_t progEntryMode; // Programm entry mode (MLCR first or Vdd)
 };
+
 struct deviceInfo const devices[] PROGMEM = {
 // http://ww1.microchip.com/downloads/en/DeviceDoc/41191D.pdf
-{s_pic12f629, 0x0F80, 1024, 0x2000, 0x2100, 8, 128, 1, 0x3000, FLASH4, EEPROM},
-{s_pic12f675, 0x0FC0, 1024, 0x2000, 0x2100, 8, 128, 1, 0x3000, FLASH4, EEPROM},
-{s_pic16f630, 0x10C0, 1024, 0x2000, 0x2100, 8, 128, 1, 0x3000, FLASH4, EEPROM},
-{s_pic16f676, 0x10E0, 1024, 0x2000, 0x2100, 8, 128, 1, 0x3000, FLASH4, EEPROM},
+{s_pic12f629, 0x0F80, 1024, 0x2000, 0x2100, 8, 128, 1, 0x3000, FLASH4, EEPROM, MCLR_first},
+{s_pic12f675, 0x0FC0, 1024, 0x2000, 0x2100, 8, 128, 1, 0x3000, FLASH4, EEPROM, MCLR_first},
+{s_pic16f630, 0x10C0, 1024, 0x2000, 0x2100, 8, 128, 1, 0x3000, FLASH4, EEPROM, MCLR_first},
+{s_pic16f676, 0x10E0, 1024, 0x2000, 0x2100, 8, 128, 1, 0x3000, FLASH4, EEPROM, MCLR_first},
 // http://ww1.microchip.com/downloads/en/DeviceDoc/30262e.pdf
-{s_pic16f84, -1, 1024, 0x2000, 0x2100, 8, 64, 0, 0, FLASH, EEPROM},
-{s_pic16f84a, 0x0560, 1024, 0x2000, 0x2100, 8, 64, 0, 0, FLASH, EEPROM},
+{s_pic16f84, -1, 1024, 0x2000, 0x2100, 8, 64, 0, 0, FLASH, EEPROM, MCLR_first},
+{s_pic16f84a, 0x0560, 1024, 0x2000, 0x2100, 8, 64, 0, 0, FLASH, EEPROM, MCLR_first},
 // http://ww1.microchip.com/downloads/en/DeviceDoc/39607c.pdf
-{s_pic16f87, 0x0720, 4096, 0x2000, 0x2100, 9, 256, 0, 0, FLASH5, EEPROM},
-{s_pic16f88, 0x0760, 4096, 0x2000, 0x2100, 9, 256, 0, 0, FLASH5, EEPROM},
+{s_pic16f87, 0x0720, 4096, 0x2000, 0x2100, 9, 256, 0, 0, FLASH5, EEPROM, Vdd_first},
+{s_pic16f88, 0x0760, 4096, 0x2000, 0x2100, 9, 256, 0, 0, FLASH5, EEPROM, Vdd_first},
 // 627/628: http://ww1.microchip.com/downloads/en/DeviceDoc/30034d.pdf
 // A series: http://ww1.microchip.com/downloads/en/DeviceDoc/41196g.pdf
-{s_pic16f627, 0x07A0, 1024, 0x2000, 0x2100, 8, 128, 0, 0, FLASH, EEPROM},
-{s_pic16f627a, 0x1040, 1024, 0x2000, 0x2100, 8, 128, 0, 0, FLASH4, EEPROM},
-{s_pic16f628, 0x07C0, 2048, 0x2000, 0x2100, 8, 128, 0, 0, FLASH, EEPROM},
-{s_pic16f628a, 0x1060, 2048, 0x2000, 0x2100, 8, 128, 0, 0, FLASH4, EEPROM},
-{s_pic16f648a, 0x1100, 4096, 0x2000, 0x2100, 8, 256, 0, 0, FLASH4, EEPROM},
+{s_pic16f627, 0x07A0, 1024, 0x2000, 0x2100, 8, 128, 0, 0, FLASH, EEPROM, MCLR_first},
+{s_pic16f627a, 0x1040, 1024, 0x2000, 0x2100, 8, 128, 0, 0, FLASH4, EEPROM, MCLR_first},
+{s_pic16f628, 0x07C0, 2048, 0x2000, 0x2100, 8, 128, 0, 0, FLASH, EEPROM, MCLR_first},
+{s_pic16f628a, 0x1060, 2048, 0x2000, 0x2100, 8, 128, 0, 0, FLASH4, EEPROM, MCLR_first},
+{s_pic16f648a, 0x1100, 4096, 0x2000, 0x2100, 8, 256, 0, 0, FLASH4, EEPROM, MCLR_first},
 // http://ww1.microchip.com/downloads/en/devicedoc/41202C.pdf
-{s_pic16f684, 0x1080, 2048, 0x2000, 0x2100, 8, 256, 0, 0, FLASH4, EEPROM},
+{s_pic16f684, 0x1080, 2048, 0x2000, 0x2100, 8, 256, 0, 0, FLASH4, EEPROM, MCLR_first},
 // http://ww1.microchip.com/downloads/en/DeviceDoc/41262A.pdf
-{s_pic16f690, 0x1400, 4096, 0x2000, 0x2100, 9, 256, 1, 0, FLASH4, EEPROM},
+{s_pic16f690, 0x1400, 4096, 0x2000, 0x2100, 9, 256, 1, 0, FLASH4, EEPROM, MCLR_first},
 // http://ww1.microchip.com/downloads/en/DeviceDoc/39025f.pdf
-{s_pic16f877, 0x09A0, 8192, 0x2000, 0x2100, 8, 256, 0, 0, FLASH4, EEPROM },
+{s_pic16f877, 0x09A0, 8192, 0x2000, 0x2100, 8, 256, 0, 0, FLASH4, EEPROM, MCLR_first},
 // http://ww1.microchip.com/downloads/en/DeviceDoc/41287D.pdf   
-{s_pic16f882, 0x2000, 2048, 0x2000, 0x2100, 9, 128, 0, 0, FLASH4, EEPROM},
-{s_pic16f883, 0x2020, 4096, 0x2000, 0x2100, 9, 256, 0, 0, FLASH4, EEPROM},
-{s_pic16f884, 0x2040, 4096, 0x2000, 0x2100, 9, 256, 0, 0, FLASH4, EEPROM},
-{s_pic16f886, 0x2060, 8192, 0x2000, 0x2100, 9, 256, 0, 0, FLASH4, EEPROM},
-{s_pic16f887, 0x2080, 8192, 0x2000, 0x2100, 9, 256, 0, 0, FLASH4, EEPROM},
-{0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+{s_pic16f882, 0x2000, 2048, 0x2000, 0x2100, 9, 128, 0, 0, FLASH4, EEPROM, MCLR_first},
+{s_pic16f883, 0x2020, 4096, 0x2000, 0x2100, 9, 256, 0, 0, FLASH4, EEPROM, MCLR_first},
+{s_pic16f884, 0x2040, 4096, 0x2000, 0x2100, 9, 256, 0, 0, FLASH4, EEPROM, MCLR_first},
+{s_pic16f886, 0x2060, 8192, 0x2000, 0x2100, 9, 256, 0, 0, FLASH4, EEPROM, MCLR_first},
+{s_pic16f887, 0x2080, 8192, 0x2000, 0x2100, 9, 256, 0, 0, FLASH4, EEPROM, MCLR_first},
+{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 };
 // Buffer for command-line character input and READBIN data packets.
 #define BINARY_TRANSFER_MAX 64
@@ -270,6 +278,7 @@ reservedEnd = programEnd;
 configSave = pgm_read_word(&(dev->configSave));
 progFlashType = pgm_read_byte(&(dev->progFlashType));
 dataFlashType = pgm_read_byte(&(dev->dataFlashType));
+hpp_progEntryMode = pgm_read_byte(&(dev->progEntryMode));
 // Print the extra device information.
 Serial.print("DeviceName: ");
 printProgString((const prog_char *)(pgm_read_word(&(dev->name))));
@@ -308,84 +317,100 @@ Serial.println();
 #define DEV_ID 6
 #define DEV_CONFIG_WORD 7
 // DEVICE command.
-void cmdDevice(const char *args)
-{
-// Make sure the device is reset before we start.
-exitProgramMode();
-// Read identifiers and configuration words from config memory.
-unsigned int userid0 = readConfigWord(DEV_USERID0);
-unsigned int userid1 = readConfigWord(DEV_USERID1);
-unsigned int userid2 = readConfigWord(DEV_USERID2);
-unsigned int userid3 = readConfigWord(DEV_USERID3);
-unsigned int deviceId = readConfigWord(DEV_ID);
-unsigned int configWord = readConfigWord(DEV_CONFIG_WORD);
-// If the device ID is all-zeroes or all-ones, then it could mean
-// one of the following:
-//
-// 1. There is no PIC in the programming socket.
-// 2. The VPP programming voltage is not available.
-// 3. Code protection is enabled and the PIC is unreadable.
-// 4. The PIC is an older model with no device identifier.
-//
-// Case 4 is the interesting one. We look for any word in configuration
-// memory or the first 16 words of program memory that is non-zero.
-// If we find a non-zero word, we assume that we have a PIC but we
-// cannot detect what type it is.
-if (deviceId == 0 || deviceId == 0x3FFF) {
-unsigned int word = userid0 | userid1 | userid2 | userid3 | configWord;
-unsigned int addr = 0;
-while (!word && addr < 16) {
-word |= readWord(addr);
-++addr;
+void cmdDevice(const char *args) {
+  // Make sure the device is reset before we start.
+  exitProgramMode();
+  // Read identifiers and configuration words from config memory.
+  unsigned int userid0 = readConfigWord(DEV_USERID0);
+  unsigned int userid1 = readConfigWord(DEV_USERID1);
+  unsigned int userid2 = readConfigWord(DEV_USERID2);
+  unsigned int userid3 = readConfigWord(DEV_USERID3);
+  unsigned int deviceId = readConfigWord(DEV_ID);
+  unsigned int configWord = readConfigWord(DEV_CONFIG_WORD);
+  // If the device ID is all-zeroes or all-ones, then it could mean
+  // one of the following:
+  //
+  // 1. There is no PIC in the programming socket.
+  // 2. The VPP programming voltage is not available.
+  // 3. Code protection is enabled and the PIC is unreadable.
+  // 4. The PIC uses the Vdd first timing to enter into programming mode
+  // 5. The PIC is an older model with no device identifier.
+  //
+  // We will explore case 4 first and then take a look at case 4.
+  //
+  // For evaluating case 5 we look for any word in configuration
+  // memory or the first 16 words of program memory that is non-zero.
+  // If we find a non-zero word, we assume that we have a PIC but we
+  // cannot detect what type it is.
+  
+  if (deviceId == 0 || deviceId == 0x3FFF) {
+    exitProgramMode();  // return from config state to reset...
+    hpp_progEntryMode = Vdd_first; // swith order, might be another type
+    userid0 = readConfigWord(DEV_USERID0);
+    userid1 = readConfigWord(DEV_USERID1);
+    userid2 = readConfigWord(DEV_USERID2);
+    userid3 = readConfigWord(DEV_USERID3);
+    deviceId = readConfigWord(DEV_ID);
+    configWord = readConfigWord(DEV_CONFIG_WORD);
+       
+    if (deviceId == 0 || deviceId == 0x3FFF) {
+        // now we explore case 5...
+        hpp_progEntryMode = MCLR_first; // swith order, might be another type
+        unsigned int word = userid0 | userid1 | userid2 | userid3 | configWord;
+        unsigned int addr = 0;
+        while (!word && addr < 16) {
+          word |= readWord(addr);
+          ++addr;
+        }
+        if (!word) {
+          Serial.println("ERROR");
+          exitProgramMode();
+          return;
+        }
+        deviceId = 0;
+      }
+  }
+  Serial.println("OK");
+  Serial.print("DeviceID: ");
+  printHex4(deviceId);
+  Serial.println();
+  // Find the device in the built-in list if we have details for it.
+  int index = 0;
+  for (;;) {
+    const prog_char *name = (const prog_char *)
+    (pgm_read_word(&(devices[index].name)));
+    if (!name) {
+      index = -1;
+      break;
+    }
+    int id = pgm_read_word(&(devices[index].deviceId));
+    if (id == (deviceId & 0xFFE0))  break;  
+    ++index;
+  }
+  if (index >= 0) {
+    initDevice(&(devices[index]));
+  } else {
+    // Reset the global parameters to their defaults. A separate
+    // "SETDEVICE" command will be needed to set the correct values.
+    programEnd = 0x07FF;
+    configStart = 0x2000;
+    configEnd = 0x2007;
+    dataStart = 0x2100;
+    dataEnd = 0x217F;
+    reservedStart = 0x0800;
+    reservedEnd = 0x07FF;
+    configSave = 0x0000;
+    progFlashType = FLASH4;
+    dataFlashType = EEPROM;
+  }
+  Serial.print("ConfigWord: ");
+  printHex4(configWord);
+  Serial.println();
+  Serial.println(".");
+  // Don't need programming mode once the details have been read.
+  exitProgramMode();
 }
-if (!word) {
-Serial.println("ERROR");
-exitProgramMode();
-return;
-}
-deviceId = 0;
-}
-Serial.println("OK");
-Serial.print("DeviceID: ");
-printHex4(deviceId);
-Serial.println();
-// Find the device in the built-in list if we have details for it.
-int index = 0;
-for (;;) {
-const prog_char *name = (const prog_char *)
-(pgm_read_word(&(devices[index].name)));
-if (!name) {
-index = -1;
-break;
-}
-int id = pgm_read_word(&(devices[index].deviceId));
-if (id == (deviceId & 0xFFE0))
-break;
-++index;
-}
-if (index >= 0) {
-initDevice(&(devices[index]));
-} else {
-// Reset the global parameters to their defaults. A separate
-// "SETDEVICE" command will be needed to set the correct values.
-programEnd = 0x07FF;
-configStart = 0x2000;
-configEnd = 0x2007;
-dataStart = 0x2100;
-dataEnd = 0x217F;
-reservedStart = 0x0800;
-reservedEnd = 0x07FF;
-configSave = 0x0000;
-progFlashType = FLASH4;
-dataFlashType = EEPROM;
-}
-Serial.print("ConfigWord: ");
-printHex4(configWord);
-Serial.println();
-Serial.println(".");
-// Don't need programming mode once the details have been read.
-exitProgramMode();
-}
+
 // DEVICES command.
 void cmdDevices(const char *args)
 {
@@ -1014,32 +1039,39 @@ return;
 // Unknown command.
 Serial.println("NOTSUPPORTED");
 }
+
 // Enter high voltage programming mode.
-void enterProgramMode()
-{
-// Bail out if already in programming mode.
-if (state != STATE_IDLE)
-return;
-// Lower MCLR, VDD, DATA, and CLOCK initially. This will put the
-// PIC into the powered-off, reset state just in case.
-digitalWrite(PIN_MCLR, MCLR_RESET);
-digitalWrite(PIN_VDD, LOW);
-digitalWrite(PIN_DATA, LOW);
-digitalWrite(PIN_CLOCK, LOW);
-// Wait for the lines to settle.
-delayMicroseconds(DELAY_SETTLE);
-// Switch DATA and CLOCK into outputs.
-pinMode(PIN_DATA, OUTPUT);
-pinMode(PIN_CLOCK, OUTPUT);
-// Raise MCLR, then VDD.
-digitalWrite(PIN_MCLR, MCLR_VPP);
-delayMicroseconds(DELAY_TPPDP);
-digitalWrite(PIN_VDD, HIGH);
-delayMicroseconds(DELAY_THLD0);
-// Now in program mode, starting at the first word of program memory.
-state = STATE_PROGRAM;
-pc = 0;
+void enterProgramMode() {
+  // Bail out if already in programming mode.
+  if (state != STATE_IDLE) return;
+  // Lower MCLR, VDD, DATA, and CLOCK initially. This will put the
+  // PIC into the powered-off, reset state just in case.
+  digitalWrite(PIN_MCLR, MCLR_RESET);
+  digitalWrite(PIN_VDD, LOW);
+  digitalWrite(PIN_DATA, LOW);
+  digitalWrite(PIN_CLOCK, LOW);
+  // Wait for the lines to settle.
+  delayMicroseconds(DELAY_SETTLE);
+  // Switch DATA and CLOCK into outputs.
+  pinMode(PIN_DATA, OUTPUT);
+  pinMode(PIN_CLOCK, OUTPUT);
+  if (hpp_progEntryMode == MCLR_first) {
+    // Raise MCLR, then VDD.
+    digitalWrite(PIN_MCLR, MCLR_VPP);
+    delayMicroseconds(DELAY_TPPDP);
+    digitalWrite(PIN_VDD, HIGH);
+    delayMicroseconds(DELAY_THLD0);
+  } else {
+    digitalWrite(PIN_VDD, HIGH);
+    delayMicroseconds(DELAY_THLD0);
+    digitalWrite(PIN_MCLR, MCLR_VPP);
+    delayMicroseconds(DELAY_TPPDP);
+  }      
+  // Now in program mode, starting at the first word of program memory.
+  state = STATE_PROGRAM;
+  pc = 0;
 }
+
 // Exit programming mode and reset the device.
 void exitProgramMode()
 {
@@ -1185,6 +1217,7 @@ return (sendReadCommand(CMD_READ_DATA_MEMORY) >> 1) & 0x00FF;
 else
 return (sendReadCommand(CMD_READ_PROGRAM_MEMORY) >> 1) & 0x3FFF;
 }
+
 // Read a word from config memory using relative, non-flat, addressing.
 // Used by the "DEVICE" command to fetch information about devices whose
 // flat address ranges are presently unknown.
@@ -1213,6 +1246,7 @@ sendSimpleCommand(CMD_INCREMENT_ADDRESS);
 }
 return (sendReadCommand(CMD_READ_PROGRAM_MEMORY) >> 1) & 0x3FFF;
 }
+
 // Begin a programming cycle, depending upon the type of flash being written.
 void beginProgramCycle(unsigned long addr, bool isData)
 {
