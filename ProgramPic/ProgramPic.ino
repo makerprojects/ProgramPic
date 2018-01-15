@@ -113,6 +113,7 @@ const char s_pic16f648a[] PROGMEM = "pic16f648a";
 const char s_pic16f684[] PROGMEM = "pic16f684";
 const char s_pic16f690[] PROGMEM = "pic16f690";
 const char s_pic16f877[] PROGMEM = "pic16f877";
+const char s_pic16f877a[] PROGMEM = "pic16f877a";
 const char s_pic16f882[] PROGMEM = "pic16f882";
 const char s_pic16f883[] PROGMEM = "pic16f883";
 const char s_pic16f884[] PROGMEM = "pic16f884";
@@ -162,6 +163,7 @@ struct deviceInfo const devices[] PROGMEM = {
 {s_pic16f690, 0x1400, 4096, 0x2000, 0x2100, 9, 256, 1, 0, FLASH4, EEPROM, MCLR_first},
 // http://ww1.microchip.com/downloads/en/DeviceDoc/39025f.pdf
 {s_pic16f877, 0x09A0, 8192, 0x2000, 0x2100, 8, 256, 0, 0, FLASH4, EEPROM, MCLR_first},
+{s_pic16f877a, 0x0E20, 8192, 0x2000, 0x2100, 8, 256, 0, 0, FLASH4, EEPROM, MCLR_first},
 // http://ww1.microchip.com/downloads/en/DeviceDoc/41287D.pdf   
 {s_pic16f882, 0x2000, 2048, 0x2000, 0x2100, 9, 128, 0, 0, FLASH4, EEPROM, MCLR_first},
 {s_pic16f883, 0x2020, 4096, 0x2000, 0x2100, 9, 256, 0, 0, FLASH4, EEPROM, MCLR_first},
@@ -385,7 +387,7 @@ void cmdDevice(const char *args) {
       break;
     }
     int id = pgm_read_word(&(devices[index].deviceId));
-    if (id == (deviceId & 0xFFE0))  break;  
+    if ((id & 0xFFE0) == (deviceId & 0xFFE0))  break;
     ++index;
   }
   if (index >= 0) {
