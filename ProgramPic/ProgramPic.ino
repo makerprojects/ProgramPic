@@ -16,6 +16,7 @@
 *
 *
 * Change log:
+* 27/01/18   - fixed bugs to program and erase 16f877a, and enhanced the code readability
 * 02/09/16:  - billy fixes for Arduino 1.6.7 compline test only. Bump version to 1.5
 * 01/30/16:  - added new mode to initiate programming for 16F87 and 16F88
 * 05/31/15:  - added support for pic 16f877 according to git_hub
@@ -29,7 +30,7 @@
 *
 */
 #define __PROG_TYPES_COMPAT__
-#include <avr/pgmspace.h>  // For PROGMEM
+#include <avr/pgmspace.h> // For PROGMEM
 // Pin mappings for the PIC programming shield.
 #define PIN_MCLR A1      // 0: MCLR is VPP voltage, 1: Reset PIC
 #define PIN_ACTIVITY A5  // LED that indicates read/write activity
@@ -50,7 +51,7 @@
 #define DELAY_TDPROG 6000     // Time for a data memory write to complete
 #define DELAY_TERA 6000       // Time for a word erase to complete
 #define DELAY_TPROG5 1000     // Time for program write on FLASH5 systems
-#define DELAY_TFULLERA 50000  // Time for a full chip erase
+#define DELAY_TFULLERA 200000  // Time for a full chip erase
 #define DELAY_TFULL84 20000   // Intermediate wait for PIC16F84/PIC16F84A
 // Commands that may be sent to the device.
 #define CMD_LOAD_CONFIG 0x00          // Load (write) to config memory
@@ -79,7 +80,7 @@ int state = STATE_IDLE;
 #define MCLR_first 0
 #define Vdd_first 1
 
-unsigned long pc = 0;  // Current program counter.
+unsigned long pc = 0; // Current program counter.
 // Flat address ranges for the various memory spaces. Defaults to the values
 // for the PIC16F628A. "DEVICE" command updates to the correct values later.
 unsigned long programEnd = 0x07FF;
@@ -92,7 +93,7 @@ unsigned long reservedEnd = 0x07FF;
 unsigned int configSave = 0x0000;
 byte progFlashType = FLASH4;
 byte dataFlashType = EEPROM;
-byte hpp_progEntryMode = MCLR_first;
+byte hpp_progEntryMode = MCLR_first; 
 
 // Program version
 const char s_Version[] = "1.5";
@@ -125,60 +126,64 @@ const char s_pic16f887[] PROGMEM = "pic16f887";
 // been tested by the author. Patches welcome to improve the list.
 
 struct deviceInfo {
-    const char PROGMEM *name;        // User-readable name of the device.
-    int16_t PROGMEM deviceId;        // Device ID for the PIC (-1 if no id).
-    uint32_t PROGMEM programSize;    // Size of program memory (words).
-    uint32_t PROGMEM configStart;    // Flat address start of configuration memory.
-    uint32_t PROGMEM dataStart;      // Flat address start of EEPROM data memory.
-    uint16_t PROGMEM configSize;     // Number of configuration words.
-    uint16_t PROGMEM dataSize;       // Size of EEPROM data memory (bytes).
-    uint16_t PROGMEM reservedWords;  // Reserved program words (e.g. for OSCCAL).
-    uint16_t PROGMEM configSave;     // Bits in config word to be saved.
-    uint8_t PROGMEM progFlashType;   // Type of flash for program memory.
-    uint8_t PROGMEM dataFlashType;   // Type of flash for data memory.
-    uint8_t PROGMEM progEntryMode;   // Programm entry mode (MLCR first or Vdd)
+    const char PROGMEM *name; // User-readable name of the device.
+    int16_t PROGMEM deviceId; // Device ID for the PIC (-1 if no id).
+    uint32_t PROGMEM programSize; // Size of program memory (words).
+    uint32_t PROGMEM configStart; // Flat address start of configuration memory.
+    uint32_t PROGMEM dataStart; // Flat address start of EEPROM data memory.
+    uint16_t PROGMEM configSize; // Number of configuration words.
+    uint16_t PROGMEM dataSize; // Size of EEPROM data memory (bytes).
+    uint16_t PROGMEM reservedWords;// Reserved program words (e.g. for OSCCAL).
+    uint16_t PROGMEM configSave; // Bits in config word to be saved.
+    uint8_t PROGMEM progFlashType; // Type of flash for program memory.
+    uint8_t PROGMEM dataFlashType; // Type of flash for data memory.
+    uint8_t PROGMEM progEntryMode; // Programm entry mode (MLCR first or Vdd)
 };
 
 struct deviceInfo const devices[] PROGMEM = {
     // http://ww1.microchip.com/downloads/en/DeviceDoc/41191D.pdf
-    { s_pic12f629, 0x0F80, 1024, 0x2000, 0x2100, 8, 128, 1, 0x3000, FLASH4, EEPROM, MCLR_first },
-    { s_pic12f675, 0x0FC0, 1024, 0x2000, 0x2100, 8, 128, 1, 0x3000, FLASH4, EEPROM, MCLR_first },
-    { s_pic16f630, 0x10C0, 1024, 0x2000, 0x2100, 8, 128, 1, 0x3000, FLASH4, EEPROM, MCLR_first },
-    { s_pic16f676, 0x10E0, 1024, 0x2000, 0x2100, 8, 128, 1, 0x3000, FLASH4, EEPROM, MCLR_first },
+    {s_pic12f629, 0x0F80, 1024, 0x2000, 0x2100, 8, 128, 1, 0x3000, FLASH4, EEPROM, MCLR_first},
+    {s_pic12f675, 0x0FC0, 1024, 0x2000, 0x2100, 8, 128, 1, 0x3000, FLASH4, EEPROM, MCLR_first},
+    {s_pic16f630, 0x10C0, 1024, 0x2000, 0x2100, 8, 128, 1, 0x3000, FLASH4, EEPROM, MCLR_first},
+    {s_pic16f676, 0x10E0, 1024, 0x2000, 0x2100, 8, 128, 1, 0x3000, FLASH4, EEPROM, MCLR_first},
     // http://ww1.microchip.com/downloads/en/DeviceDoc/30262e.pdf
-    { s_pic16f84, -1, 1024, 0x2000, 0x2100, 8, 64, 0, 0, FLASH, EEPROM, MCLR_first },
-    { s_pic16f84a, 0x0560, 1024, 0x2000, 0x2100, 8, 64, 0, 0, FLASH, EEPROM, MCLR_first },
+    {s_pic16f84, -1, 1024, 0x2000, 0x2100, 8, 64, 0, 0, FLASH, EEPROM, MCLR_first},
+    {s_pic16f84a, 0x0560, 1024, 0x2000, 0x2100, 8, 64, 0, 0, FLASH, EEPROM, MCLR_first},
     // http://ww1.microchip.com/downloads/en/DeviceDoc/39607c.pdf
-    { s_pic16f87, 0x0720, 4096, 0x2000, 0x2100, 9, 256, 0, 0, FLASH5, EEPROM, Vdd_first },
-    { s_pic16f88, 0x0760, 4096, 0x2000, 0x2100, 9, 256, 0, 0, FLASH5, EEPROM, Vdd_first },
+    {s_pic16f87, 0x0720, 4096, 0x2000, 0x2100, 9, 256, 0, 0, FLASH5, EEPROM, Vdd_first},
+    {s_pic16f88, 0x0760, 4096, 0x2000, 0x2100, 9, 256, 0, 0, FLASH5, EEPROM, Vdd_first},
     // 627/628: http://ww1.microchip.com/downloads/en/DeviceDoc/30034d.pdf
     // A series: http://ww1.microchip.com/downloads/en/DeviceDoc/41196g.pdf
-    { s_pic16f627, 0x07A0, 1024, 0x2000, 0x2100, 8, 128, 0, 0, FLASH, EEPROM, MCLR_first },
-    { s_pic16f627a, 0x1040, 1024, 0x2000, 0x2100, 8, 128, 0, 0, FLASH4, EEPROM, MCLR_first },
-    { s_pic16f628, 0x07C0, 2048, 0x2000, 0x2100, 8, 128, 0, 0, FLASH, EEPROM, MCLR_first },
-    { s_pic16f628a, 0x1060, 2048, 0x2000, 0x2100, 8, 128, 0, 0, FLASH4, EEPROM, MCLR_first },
-    { s_pic16f648a, 0x1100, 4096, 0x2000, 0x2100, 8, 256, 0, 0, FLASH4, EEPROM, MCLR_first },
+    {s_pic16f627, 0x07A0, 1024, 0x2000, 0x2100, 8, 128, 0, 0, FLASH, EEPROM, MCLR_first},
+    {s_pic16f627a, 0x1040, 1024, 0x2000, 0x2100, 8, 128, 0, 0, FLASH4, EEPROM, MCLR_first},
+    {s_pic16f628, 0x07C0, 2048, 0x2000, 0x2100, 8, 128, 0, 0, FLASH, EEPROM, MCLR_first},
+    {s_pic16f628a, 0x1060, 2048, 0x2000, 0x2100, 8, 128, 0, 0, FLASH4, EEPROM, MCLR_first},
+    {s_pic16f648a, 0x1100, 4096, 0x2000, 0x2100, 8, 256, 0, 0, FLASH4, EEPROM, MCLR_first},
     // http://ww1.microchip.com/downloads/en/devicedoc/41202C.pdf
-    { s_pic16f684, 0x1080, 2048, 0x2000, 0x2100, 8, 256, 0, 0, FLASH4, EEPROM, MCLR_first },
+    {s_pic16f684, 0x1080, 2048, 0x2000, 0x2100, 8, 256, 0, 0, FLASH4, EEPROM, MCLR_first},
     // http://ww1.microchip.com/downloads/en/DeviceDoc/41262A.pdf
-    { s_pic16f690, 0x1400, 4096, 0x2000, 0x2100, 9, 256, 1, 0, FLASH4, EEPROM, MCLR_first },
+    {s_pic16f690, 0x1400, 4096, 0x2000, 0x2100, 9, 256, 1, 0, FLASH4, EEPROM, MCLR_first},
     // http://ww1.microchip.com/downloads/en/DeviceDoc/39025f.pdf
-    { s_pic16f877, 0x09A0, 8192, 0x2000, 0x2100, 8, 256, 0, 0, FLASH4, EEPROM, MCLR_first },
-    { s_pic16f877a, 0x0E20, 8192, 0x2000, 0x2100, 8, 256, 0, 0, FLASH4, EEPROM, MCLR_first },
-    // http://ww1.microchip.com/downloads/en/DeviceDoc/41287D.pdf
-    { s_pic16f882, 0x2000, 2048, 0x2000, 0x2100, 9, 128, 0, 0, FLASH4, EEPROM, MCLR_first },
-    { s_pic16f883, 0x2020, 4096, 0x2000, 0x2100, 9, 256, 0, 0, FLASH4, EEPROM, MCLR_first },
-    { s_pic16f884, 0x2040, 4096, 0x2000, 0x2100, 9, 256, 0, 0, FLASH4, EEPROM, MCLR_first },
-    { s_pic16f886, 0x2060, 8192, 0x2000, 0x2100, 9, 256, 0, 0, FLASH4, EEPROM, MCLR_first },
-    { s_pic16f887, 0x2080, 8192, 0x2000, 0x2100, 9, 256, 0, 0, FLASH4, EEPROM, MCLR_first },
-    { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }
+    {s_pic16f877, 0x09A0, 8192, 0x2000, 0x2100, 8, 256, 0, 0, FLASH4, EEPROM, MCLR_first},
+    {s_pic16f877a, 0x0E20, 8192, 0x2000, 0x2100, 8, 256, 0, 0, FLASH5, EEPROM, Vdd_first},
+    // http://ww1.microchip.com/downloads/en/DeviceDoc/41287D.pdf   
+    {s_pic16f882, 0x2000, 2048, 0x2000, 0x2100, 9, 128, 0, 0, FLASH4, EEPROM, MCLR_first},
+    {s_pic16f883, 0x2020, 4096, 0x2000, 0x2100, 9, 256, 0, 0, FLASH4, EEPROM, MCLR_first},
+    {s_pic16f884, 0x2040, 4096, 0x2000, 0x2100, 9, 256, 0, 0, FLASH4, EEPROM, MCLR_first},
+    {s_pic16f886, 0x2060, 8192, 0x2000, 0x2100, 9, 256, 0, 0, FLASH4, EEPROM, MCLR_first},
+    {s_pic16f887, 0x2080, 8192, 0x2000, 0x2100, 9, 256, 0, 0, FLASH4, EEPROM, MCLR_first},
+    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 };
+
 // Buffer for command-line character input and READBIN data packets.
 #define BINARY_TRANSFER_MAX 64
 #define BUFFER_MAX (BINARY_TRANSFER_MAX + 1)
 char buffer[BUFFER_MAX];
 int buflen = 0;
 unsigned long lastActive = 0;
+
+/*************************************************************************************************/
+
 void setup()
 {
     // Need a serial link to the host.
@@ -196,6 +201,8 @@ void setup()
     digitalWrite(PIN_ACTIVITY, LOW);
 }
 
+/*************************************************************************************************/
+
 void loop()
 {
     if (Serial.available()) {
@@ -206,9 +213,9 @@ void loop()
             if (buflen > 0) {
                 buffer[buflen] = '\0';
                 buflen = 0;
-                digitalWrite(PIN_ACTIVITY, HIGH);  // Turn on activity LED.
+                digitalWrite(PIN_ACTIVITY, HIGH); // Turn on activity LED.
                 processCommand(buffer);
-                digitalWrite(PIN_ACTIVITY, LOW);  // Turn off activity LED.
+                digitalWrite(PIN_ACTIVITY, LOW); // Turn off activity LED.
             }
         } else if (ch == 0x08) {
             // Backspace over the last character.
@@ -232,6 +239,8 @@ void loop()
     }
 }
 
+/*************************************************************************************************/
+
 void printHex1(unsigned int value)
 {
     if (value >= 10)
@@ -240,6 +249,8 @@ void printHex1(unsigned int value)
         Serial.print((char)('0' + value));
 }
 
+/*************************************************************************************************/
+
 void printHex4(unsigned int word)
 {
     printHex1((word >> 12) & 0x0F);
@@ -247,6 +258,9 @@ void printHex4(unsigned int word)
     printHex1((word >> 4) & 0x0F);
     printHex1(word & 0x0F);
 }
+
+/*************************************************************************************************/
+
 void printHex8(unsigned long word)
 {
     unsigned int upper = (unsigned int)(word >> 16);
@@ -254,6 +268,9 @@ void printHex8(unsigned long word)
         printHex4(upper);
     printHex4((unsigned int)word);
 }
+
+/*************************************************************************************************/
+
 void printProgString(const char PROGMEM *str)
 {
     for (;;) {
@@ -265,12 +282,16 @@ void printProgString(const char PROGMEM *str)
     }
 }
 
+/*************************************************************************************************/
+
 // PROGRAM_PIC_VERSION command.
 void cmdVersion(const char *args)
 {
     Serial.print("ProgramPIC ");
     Serial.println(s_Version);
 }
+
+/*************************************************************************************************/
 
 // Initialize device properties from the "devices" list and
 // print them to the serial port. Note: "dev" is in PROGMEM.
@@ -319,6 +340,8 @@ void initDevice(const struct deviceInfo *dev)
     }
 }
 
+/*************************************************************************************************/
+
 // Offsets of interesting config locations that contain device information.
 #define DEV_USERID0 0
 #define DEV_USERID1 1
@@ -326,6 +349,8 @@ void initDevice(const struct deviceInfo *dev)
 #define DEV_USERID3 3
 #define DEV_ID 6
 #define DEV_CONFIG_WORD 7
+
+/*************************************************************************************************/
 
 // DEVICE command.
 void cmdDevice(const char *args)
@@ -356,8 +381,8 @@ void cmdDevice(const char *args)
     // cannot detect what type it is.
 
     if (deviceId == 0 || deviceId == 0x3FFF) {
-        exitProgramMode();              // return from config state to reset...
-        hpp_progEntryMode = Vdd_first;  // swith order, might be another type
+        exitProgramMode();  // return from config state to reset...
+        hpp_progEntryMode = Vdd_first; // swith order, might be another type
         userid0 = readConfigWord(DEV_USERID0);
         userid1 = readConfigWord(DEV_USERID1);
         userid2 = readConfigWord(DEV_USERID2);
@@ -367,7 +392,7 @@ void cmdDevice(const char *args)
 
         if (deviceId == 0 || deviceId == 0x3FFF) {
             // now we explore case 5...
-            hpp_progEntryMode = MCLR_first;  // swith order, might be another type
+            hpp_progEntryMode = MCLR_first; // swith order, might be another type
             unsigned int word = userid0 | userid1 | userid2 | userid3 | configWord;
             unsigned int addr = 0;
             while (!word && addr < 16) {
@@ -389,14 +414,14 @@ void cmdDevice(const char *args)
     // Find the device in the built-in list if we have details for it.
     int index = 0;
     for (;;) {
-        const char PROGMEM *name = (const char PROGMEM *)(pgm_read_word(&(devices[index].name)));
+        const char PROGMEM *name = (const char PROGMEM *)
+            (pgm_read_word(&(devices[index].name)));
         if (!name) {
             index = -1;
             break;
         }
         int id = pgm_read_word(&(devices[index].deviceId));
-        if ((id & 0xFFE0) == (deviceId & 0xFFE0))
-            break;
+        if ((id & 0xFFE0) == (deviceId & 0xFFE0))  break;
         ++index;
     }
     if (index >= 0) {
@@ -423,13 +448,15 @@ void cmdDevice(const char *args)
     exitProgramMode();
 }
 
-// DEVICES command.
+/*************************************************************************************************/
+
 void cmdDevices(const char *args)
 {
     Serial.println("OK");
     int index = 0;
     for (;;) {
-        const char PROGMEM *name = (const char PROGMEM *)(pgm_read_word(&(devices[index].name)));
+        const char PROGMEM *name = (const char PROGMEM *)
+            (pgm_read_word(&(devices[index].name)));
         if (!name)
             break;
         if (index > 0) {
@@ -449,34 +476,34 @@ void cmdDevices(const char *args)
     Serial.println(".");
 }
 
-// SETDEVICE command.
-void cmdSetDevice(const char *args)
-{
+/*************************************************************************************************/
+
+void cmdSetDevice(const char *args) {
     // Extract the name of the device from the command arguments.
     int len = 0;
     for (;;) {
         char ch = args[len];
-        if (ch == '\0' || ch == ' ' || ch == '\t')
-            break;
+        if (ch == '\0' || ch == ' ' || ch == '\t')  break;
         ++len;
     }
     // Look for the name in the devices list.
     int index = 0;
     for (;;) {
         const char PROGMEM *name = (const char PROGMEM *)(pgm_read_word(&(devices[index].name)));
-        if (!name)
-            break;
+        if (!name) break;
         if (matchString(name, args, len)) {
             Serial.println("OK");
             initDevice(&(devices[index]));
             Serial.println(".");
-            exitProgramMode();  // Force a reset upon the next command.
+            exitProgramMode(); // Force a reset upon the next command.
             return;
         }
         ++index;
     }
     Serial.println("ERROR");
 }
+
+/*************************************************************************************************/
 
 int parseHex(const char *args, unsigned long *value)
 {
@@ -499,6 +526,9 @@ int parseHex(const char *args, unsigned long *value)
         return 0;
     return size;
 }
+
+/*************************************************************************************************/
+
 // Parse a range of addresses of the form START or START-END.
 bool parseRange(const char *args, unsigned long *start, unsigned long *end)
 {
@@ -519,6 +549,9 @@ bool parseRange(const char *args, unsigned long *start, unsigned long *end)
         return false;
     return *end >= *start;
 }
+
+/*************************************************************************************************/
+
 bool parseCheckedRange(const char *args, unsigned long *start, unsigned long *end)
 {
     // Parse the basic values and make sure that start <= end.
@@ -540,7 +573,9 @@ bool parseCheckedRange(const char *args, unsigned long *start, unsigned long *en
     }
     return true;
 }
-// READ command.
+
+/*************************************************************************************************/
+
 void cmdRead(const char *args)
 {
     unsigned long start;
@@ -575,7 +610,9 @@ void cmdRead(const char *args)
     Serial.println();
     Serial.println(".");
 }
-// READBIN command.
+
+/*************************************************************************************************/
+
 void cmdReadBinary(const char *args)
 {
     unsigned long start;
@@ -617,6 +654,9 @@ void cmdReadBinary(const char *args)
     // Write the terminator (a zero-length packet).
     Serial.write((uint8_t)0x00);
 }
+
+/*************************************************************************************************/
+
 const char s_force[] PROGMEM = "FORCE";
 // WRITE command.
 void cmdWrite(const char *args)
@@ -649,7 +689,7 @@ void cmdWrite(const char *args)
         limit = dataEnd;
     } else {
         // Address is not within one of the valid ranges.
-        Serial.println("ERROR");
+        Serial.println("ERROR ADDR INVALID");
         return;
     }
     int count = 0;
@@ -659,24 +699,24 @@ void cmdWrite(const char *args)
         if (*args == '\0')
             break;
         if (*args == '-') {
-            Serial.println("ERROR");
+            Serial.println("ERROR PARAM ERROR");
             return;
         }
         size = parseHex(args, &value);
         if (!size) {
-            Serial.println("ERROR");
+            Serial.println("ERROR INVALID HEX VAL");
             return;
         }
         args += size;
         if (addr > limit) {
             // We've reached the limit of this memory area, so fail.
-            Serial.println("ERROR");
+            Serial.println("ERROR OUT OF BOUNDS");
             return;
         }
         if (!force) {
             if (!writeWord(addr, (unsigned int)value)) {
                 // The actual write to the device failed.
-                Serial.println("ERROR");
+                Serial.println("ERROR WRITING");
                 return;
             }
         } else {
@@ -696,13 +736,19 @@ void cmdWrite(const char *args)
         Serial.println("OK");
     }
 }
+
+/*************************************************************************************************/
+
 // Blocking serial read for use by WRITEBIN.
 int readBlocking()
 {
     while (!Serial.available())
-        ;  // Do nothing.
+        ; // Do nothing.
     return Serial.read();
 }
+
+/*************************************************************************************************/
+
 // WRITEBIN command.
 void cmdWriteBinary(const char *args)
 {
@@ -756,7 +802,7 @@ void cmdWriteBinary(const char *args)
             if (offset < BINARY_TRANSFER_MAX) {
                 buffer[offset++] = (char)readBlocking();
             } else {
-                readBlocking();  // Packet is too big - discard extra bytes.
+                readBlocking(); // Packet is too big - discard extra bytes.
                 ++offset;
             }
         }
@@ -767,8 +813,9 @@ void cmdWriteBinary(const char *args)
                 Serial.println("ERROR");
                 return;
             }
-            unsigned int value = (((unsigned int)buffer[posn]) & 0xFF)
-                                 | ((((unsigned int)buffer[posn + 1]) & 0xFF) << 8);
+            unsigned int value =
+                (((unsigned int)buffer[posn]) & 0xFF) |
+                ((((unsigned int)buffer[posn + 1]) & 0xFF) << 8);
             if (!force) {
                 if (!writeWord(addr, (unsigned int)value)) {
                     // The actual write to the device failed.
@@ -798,6 +845,9 @@ void cmdWriteBinary(const char *args)
     }
     Serial.println("OK");
 }
+
+/*************************************************************************************************/
+
 const char s_noPreserve[] PROGMEM = "NOPRESERVE";
 // ERASE command.
 void cmdErase(const char *args)
@@ -811,7 +861,9 @@ void cmdErase(const char *args)
     unsigned int *reserved = 0;
     unsigned int configWord = 0x3FFF;
     if (preserve && reservedStart <= reservedEnd) {
-        size_t size = ((size_t)(reservedEnd - reservedStart + 1)) * sizeof(unsigned int);
+                Serial.println("Preserving config");
+        size_t size = ((size_t)(reservedEnd - reservedStart + 1))
+            * sizeof(unsigned int);
         reserved = (unsigned int *)malloc(size);
         if (reserved) {
             unsigned long addr = reservedStart;
@@ -828,40 +880,41 @@ void cmdErase(const char *args)
         }
     }
     if (configSave != 0 && preserve) {
+                Serial.println("Preserving config word");
         // Some of the bits in the configuration word must also be saved.
         configWord &= ~configSave;
         configWord |= readWord(configStart + DEV_CONFIG_WORD) & configSave;
     }
     // Perform the memory type specific erase sequence.
     switch (progFlashType) {
-        case FLASH4:
-            setErasePC();
-            sendSimpleCommand(CMD_BULK_ERASE_PROGRAM);
-            delayMicroseconds(DELAY_TERA);
-            sendSimpleCommand(CMD_BULK_ERASE_DATA);
-            break;
-        case FLASH5:
-            setErasePC();
-            sendSimpleCommand(CMD_CHIP_ERASE);
-            break;
-        default:
-            // Details for disabling code protection and erasing all memory
-            // for PIC16F84/PIC16F84A comes from this doc, section 4.1:
-            // http://ww1.microchip.com/downloads/en/DeviceDoc/30262e.pdf
-            setErasePC();
-            for (int count = 0; count < 7; ++count)
-                sendSimpleCommand(CMD_INCREMENT_ADDRESS);  // Advance to 0x2007
-            sendSimpleCommand(0x01);                       // Command 1
-            sendSimpleCommand(0x07);                       // Command 7
-            sendSimpleCommand(CMD_BEGIN_PROGRAM);
-            delayMicroseconds(DELAY_TFULL84);
-            sendSimpleCommand(0x01);  // Command 1
-            sendSimpleCommand(0x07);  // Command 7
-            // Some FLASH devices need the data memory to be erased separately.
-            sendWriteCommand(CMD_LOAD_DATA_MEMORY, 0x3FFF);
-            sendSimpleCommand(CMD_BULK_ERASE_DATA);
-            sendSimpleCommand(CMD_BEGIN_PROGRAM);
-            break;
+    case FLASH4:
+        setErasePC();
+        sendSimpleCommand(CMD_BULK_ERASE_PROGRAM);
+        delayMicroseconds(DELAY_TERA);
+        sendSimpleCommand(CMD_BULK_ERASE_DATA);
+        break;
+    case FLASH5:
+        setErasePC();
+        sendSimpleCommand(CMD_CHIP_ERASE);
+        break;
+    default:
+        // Details for disabling code protection and erasing all memory
+        // for PIC16F84/PIC16F84A comes from this doc, section 4.1:
+        // http://ww1.microchip.com/downloads/en/DeviceDoc/30262e.pdf
+        setErasePC();
+        for (int count = 0; count < 7; ++count)
+            sendSimpleCommand(CMD_INCREMENT_ADDRESS); // Advance to 0x2007
+        sendSimpleCommand(0x01); // Command 1
+        sendSimpleCommand(0x07); // Command 7
+        sendSimpleCommand(CMD_BEGIN_PROGRAM);
+        delayMicroseconds(DELAY_TFULL84);
+        sendSimpleCommand(0x01); // Command 1
+        sendSimpleCommand(0x07); // Command 7
+        // Some FLASH devices need the data memory to be erased separately.
+        sendWriteCommand(CMD_LOAD_DATA_MEMORY, 0x3FFF);
+        sendSimpleCommand(CMD_BULK_ERASE_DATA);
+        sendSimpleCommand(CMD_BEGIN_PROGRAM);
+        break;
     }
     // Wait until the chip is fully erased.
     delayMicroseconds(DELAY_TFULLERA);
@@ -870,6 +923,7 @@ void cmdErase(const char *args)
     enterProgramMode();
     // Write the reserved words back to program memory.
     if (reserved) {
+                Serial.println("Restoring preserved config_word");
         unsigned long addr = reservedStart;
         int offset = 0;
         bool ok = true;
@@ -889,79 +943,103 @@ void cmdErase(const char *args)
     // Forcibly write 0x3FFF over the configuration words as erase
     // sometimes won't reset the words (e.g. PIC16F628A). If the
     // write fails, then leave the words as-is - don't report the failure.
-    for (unsigned long configAddr = configStart + DEV_CONFIG_WORD; configAddr <= configEnd;
-         ++configAddr)
+    for (unsigned long configAddr = configStart + DEV_CONFIG_WORD;
+        configAddr <= configEnd; ++configAddr) {
         writeWordForced(configAddr, configWord);
+        }
     // Done.
     Serial.println("OK");
 }
+
+/*************************************************************************************************/
+
 // PWROFF command.
 void cmdPowerOff(const char *args)
 {
     exitProgramMode();
     Serial.println("OK");
 }
+
+/*************************************************************************************************/
+
 // List of all commands that are understood by the programmer.
 typedef void (*commandFunc)(const char *args);
-typedef struct {
+typedef struct
+{
     const char PROGMEM *name;
     commandFunc func;
     const char PROGMEM *desc;
     const char PROGMEM *args;
 } command_t;
+
 const char s_cmdRead[] PROGMEM = "READ";
-const char s_cmdReadDesc[] PROGMEM = "Reads program and data words from device memory (text)";
+const char s_cmdReadDesc[] PROGMEM =
+    "Reads program and data words from device memory (text)";
 const char s_cmdReadArgs[] PROGMEM = "STARTADDR[-ENDADDR]";
 const char s_cmdReadBinary[] PROGMEM = "READBIN";
-const char s_cmdReadBinaryDesc[] PROGMEM
-    = "Reads program and data words from device memory (binary)";
+const char s_cmdReadBinaryDesc[] PROGMEM =
+    "Reads program and data words from device memory (binary)";
 const char s_cmdWrite[] PROGMEM = "WRITE";
-const char s_cmdWriteDesc[] PROGMEM = "Writes program and data words to device memory (text)";
+const char s_cmdWriteDesc[] PROGMEM =
+    "Writes program and data words to device memory (text)";
 const char s_cmdWriteArgs[] PROGMEM = "STARTADDR WORD [WORD ...]";
 const char s_cmdWriteBinary[] PROGMEM = "WRITEBIN";
-const char s_cmdWriteBinaryDesc[] PROGMEM
-    = "Writes program and data words to device memory (binary)";
+const char s_cmdWriteBinaryDesc[] PROGMEM =
+    "Writes program and data words to device memory (binary)";
 const char s_cmdWriteBinaryArgs[] PROGMEM = "STARTADDR";
 const char s_cmdErase[] PROGMEM = "ERASE";
-const char s_cmdEraseDesc[] PROGMEM
-    = "Erases the contents of program, configuration, and data memory";
+const char s_cmdEraseDesc[] PROGMEM =
+    "Erases the contents of program, configuration, and data memory";
 const char s_cmdDevice[] PROGMEM = "DEVICE";
-const char s_cmdDeviceDesc[] PROGMEM = "Probes the device and returns information about it";
+const char s_cmdDeviceDesc[] PROGMEM =
+    "Probes the device and returns information about it";
 const char s_cmdDevices[] PROGMEM = "DEVICES";
-const char s_cmdDevicesDesc[] PROGMEM = "Returns a list of all supported device types";
+const char s_cmdDevicesDesc[] PROGMEM =
+    "Returns a list of all supported device types";
 const char s_cmdSetDevice[] PROGMEM = "SETDEVICE";
-const char s_cmdSetDeviceDesc[] PROGMEM = "Sets a specific device type manually";
+const char s_cmdSetDeviceDesc[] PROGMEM =
+    "Sets a specific device type manually";
 const char s_cmdSetDeviceArgs[] PROGMEM = "DEVTYPE";
 const char s_cmdPowerOff[] PROGMEM = "PWROFF";
-const char s_cmdPowerOffDesc[] PROGMEM = "Powers off the device in the programming socket";
+const char s_cmdPowerOffDesc[] PROGMEM =
+    "Powers off the device in the programming socket";
 const char s_cmdVersion[] PROGMEM = "PROGRAM_PIC_VERSION";
-const char s_cmdVersionDesc[] PROGMEM = "Prints the version of ProgramPIC";
+const char s_cmdVersionDesc[] PROGMEM =
+    "Prints the version of ProgramPIC";
 const char s_cmdHelp[] PROGMEM = "HELP";
-const char s_cmdHelpDesc[] PROGMEM = "Prints this help message";
-const command_t commands[] PROGMEM
-    = { { s_cmdRead, cmdRead, s_cmdReadDesc, s_cmdReadArgs },
-        { s_cmdReadBinary, cmdReadBinary, s_cmdReadBinaryDesc, s_cmdReadArgs },
-        { s_cmdWrite, cmdWrite, s_cmdWriteDesc, s_cmdWriteArgs },
-        { s_cmdWriteBinary, cmdWriteBinary, s_cmdWriteBinaryDesc, s_cmdWriteBinaryArgs },
-        { s_cmdErase, cmdErase, s_cmdEraseDesc, 0 },
-        { s_cmdDevice, cmdDevice, s_cmdDeviceDesc, 0 },
-        { s_cmdDevices, cmdDevices, s_cmdDevicesDesc, 0 },
-        { s_cmdSetDevice, cmdSetDevice, s_cmdSetDeviceDesc, s_cmdSetDeviceArgs },
-        { s_cmdPowerOff, cmdPowerOff, s_cmdPowerOffDesc, 0 },
-        { s_cmdVersion, cmdVersion, s_cmdVersionDesc, 0 },
-        { s_cmdHelp, cmdHelp, s_cmdHelpDesc, 0 },
-        { 0, 0 } };
+const char s_cmdHelpDesc[] PROGMEM =
+    "Prints this help message";
+const command_t commands[] PROGMEM = {
+    {s_cmdRead, cmdRead, s_cmdReadDesc, s_cmdReadArgs},
+    {s_cmdReadBinary, cmdReadBinary, s_cmdReadBinaryDesc, s_cmdReadArgs},
+    {s_cmdWrite, cmdWrite, s_cmdWriteDesc, s_cmdWriteArgs},
+    {s_cmdWriteBinary, cmdWriteBinary, s_cmdWriteBinaryDesc, s_cmdWriteBinaryArgs},
+    {s_cmdErase, cmdErase, s_cmdEraseDesc, 0},
+    {s_cmdDevice, cmdDevice, s_cmdDeviceDesc, 0},
+    {s_cmdDevices, cmdDevices, s_cmdDevicesDesc, 0},
+    {s_cmdSetDevice, cmdSetDevice, s_cmdSetDeviceDesc, s_cmdSetDeviceArgs},
+    {s_cmdPowerOff, cmdPowerOff, s_cmdPowerOffDesc, 0},
+    {s_cmdVersion, cmdVersion, s_cmdVersionDesc, 0},
+    {s_cmdHelp, cmdHelp, s_cmdHelpDesc, 0},
+    {0, 0}
+};
+
+/*************************************************************************************************/
+
 // "HELP" command.
 void cmdHelp(const char *args)
 {
     Serial.println("OK");
     int index = 0;
     for (;;) {
-        const char PROGMEM *name = (const char PROGMEM *)(pgm_read_word(&(commands[index].name)));
+        const char PROGMEM *name = (const char PROGMEM *)
+            (pgm_read_word(&(commands[index].name)));
         if (!name)
             break;
-        const char PROGMEM *desc = (const char PROGMEM *)(pgm_read_word(&(commands[index].desc)));
-        const char PROGMEM *args = (const char PROGMEM *)(pgm_read_word(&(commands[index].args)));
+        const char PROGMEM *desc = (const char PROGMEM *)
+            (pgm_read_word(&(commands[index].desc)));
+        const char PROGMEM *args = (const char PROGMEM *)
+            (pgm_read_word(&(commands[index].args)));
         printProgString(name);
         if (args) {
             Serial.print(' ');
@@ -975,6 +1053,9 @@ void cmdHelp(const char *args)
     }
     Serial.println(".");
 }
+
+/*************************************************************************************************/
+
 // Match a data-space string where the name comes from PROGMEM.
 bool matchString(const char PROGMEM *name, const char *str, int len)
 {
@@ -998,6 +1079,8 @@ bool matchString(const char PROGMEM *name, const char *str, int len)
     return false;
 }
 
+/*************************************************************************************************/
+
 // Process commands from the host.
 void processCommand(const char *buf)
 {
@@ -1005,7 +1088,7 @@ void processCommand(const char *buf)
     while (*buf == ' ' || *buf == '\t')
         ++buf;
     if (*buf == '\0')
-        return;  // Ignore blank lines.
+        return; // Ignore blank lines.
     // Extract the command portion of the line.
     const char *cmd = buf;
     int len = 0;
@@ -1022,11 +1105,13 @@ void processCommand(const char *buf)
     // Find the command and execute it.
     int index = 0;
     for (;;) {
-        const char PROGMEM *name = (const char PROGMEM *)(pgm_read_word(&(commands[index].name)));
+        const char PROGMEM *name = (const char PROGMEM *)
+            (pgm_read_word(&(commands[index].name)));
         if (!name)
             break;
         if (matchString(name, cmd, len)) {
-            commandFunc func = (commandFunc)(pgm_read_word(&(commands[index].func)));
+            commandFunc func =
+                (commandFunc)(pgm_read_word(&(commands[index].func)));
             (*func)(buf);
             return;
         }
@@ -1035,6 +1120,8 @@ void processCommand(const char *buf)
     // Unknown command.
     Serial.println("NOTSUPPORTED");
 }
+
+/*************************************************************************************************/
 
 // Enter high voltage programming mode.
 void enterProgramMode()
@@ -1070,6 +1157,8 @@ void enterProgramMode()
     pc = 0;
 }
 
+/*************************************************************************************************/
+
 // Exit programming mode and reset the device.
 void exitProgramMode()
 {
@@ -1088,6 +1177,9 @@ void exitProgramMode()
     state = STATE_IDLE;
     pc = 0;
 }
+
+/*************************************************************************************************/
+
 // Send a command to the PIC.
 void sendCommand(byte cmd)
 {
@@ -1102,13 +1194,20 @@ void sendCommand(byte cmd)
         delayMicroseconds(DELAY_THLD1);
         cmd >>= 1;
     }
+        digitalWrite(PIN_DATA, LOW);
 }
+
+/*************************************************************************************************/
+
 // Send a command to the PIC that has no arguments.
 void sendSimpleCommand(byte cmd)
 {
     sendCommand(cmd);
     delayMicroseconds(DELAY_TDLY2);
 }
+
+/*************************************************************************************************/
+
 // Send a command to the PIC that writes a data argument.
 void sendWriteCommand(byte cmd, unsigned int data)
 {
@@ -1127,6 +1226,8 @@ void sendWriteCommand(byte cmd, unsigned int data)
     }
     delayMicroseconds(DELAY_TDLY2);
 }
+
+/*************************************************************************************************/
 
 // Send a command to the PIC that reads back a data value.
 unsigned int sendReadCommand(byte cmd)
@@ -1149,6 +1250,8 @@ unsigned int sendReadCommand(byte cmd)
     delayMicroseconds(DELAY_TDLY2);
     return data;
 }
+
+/*************************************************************************************************/
 
 // Set the program counter to a specific "flat" address.
 void setPC(unsigned long addr)
@@ -1196,6 +1299,9 @@ void setPC(unsigned long addr)
         ++pc;
     }
 }
+
+/*************************************************************************************************/
+
 // Sets the PC for "erase mode", which is activated by loading the
 // data value 0x3FFF into location 0 of configuration memory.
 void setErasePC()
@@ -1208,6 +1314,8 @@ void setErasePC()
     state = STATE_CONFIG;
 }
 
+/*************************************************************************************************/
+
 // Read a word from memory (program, config, or data depending upon addr).
 // The start and stop bits will be stripped from the raw value from the PIC.
 unsigned int readWord(unsigned long addr)
@@ -1218,6 +1326,8 @@ unsigned int readWord(unsigned long addr)
     else
         return (sendReadCommand(CMD_READ_PROGRAM_MEMORY) >> 1) & 0x3FFF;
 }
+
+/*************************************************************************************************/
 
 // Read a word from config memory using relative, non-flat, addressing.
 // Used by the "DEVICE" command to fetch information about devices whose
@@ -1248,26 +1358,31 @@ unsigned int readConfigWord(unsigned long addr)
     return (sendReadCommand(CMD_READ_PROGRAM_MEMORY) >> 1) & 0x3FFF;
 }
 
+/*************************************************************************************************/
+
 // Begin a programming cycle, depending upon the type of flash being written.
 void beginProgramCycle(unsigned long addr, bool isData)
 {
     switch (isData ? dataFlashType : progFlashType) {
-        case FLASH:
-        case EEPROM:
-            sendSimpleCommand(CMD_BEGIN_PROGRAM);
-            delayMicroseconds(DELAY_TDPROG + DELAY_TERA);
-            break;
-        case FLASH4:
-            sendSimpleCommand(CMD_BEGIN_PROGRAM);
-            delayMicroseconds(DELAY_TPROG);
-            break;
-        case FLASH5:
-            sendSimpleCommand(CMD_BEGIN_PROGRAM_ONLY);
-            delayMicroseconds(DELAY_TPROG5);
-            sendSimpleCommand(CMD_END_PROGRAM_ONLY);
-            break;
+    case FLASH:
+    case EEPROM:
+        sendSimpleCommand(CMD_BEGIN_PROGRAM);
+        delayMicroseconds(DELAY_TDPROG + DELAY_TERA);
+        break;
+    case FLASH4:
+        sendSimpleCommand(CMD_BEGIN_PROGRAM);
+        delayMicroseconds(DELAY_TPROG);
+        break;
+    case FLASH5:
+        sendSimpleCommand(CMD_BEGIN_PROGRAM_ONLY);
+        delayMicroseconds(DELAY_TPROG5);
+        sendSimpleCommand(CMD_END_PROGRAM_ONLY);
+        break;
     }
 }
+
+/*************************************************************************************************/
+
 // Write a word to memory (program, config, or data depending upon addr).
 // Returns true if the write succeeded, false if read-back failed to match.
 bool writeWord(unsigned long addr, unsigned int word)
@@ -1280,7 +1395,16 @@ bool writeWord(unsigned long addr, unsigned int word)
         beginProgramCycle(addr, true);
         readBack = sendReadCommand(CMD_READ_DATA_MEMORY);
         readBack = (readBack >> 1) & 0x00FF;
-    } else if (!configSave || addr != (configStart + DEV_CONFIG_WORD)) {
+    } else if (addr == (configStart + DEV_CONFIG_WORD)) {
+        /* 16f877a used this mode for prorgamming CONFIG_WORD */
+        word &= 0x3FFF;
+        sendWriteCommand(CMD_LOAD_PROGRAM_MEMORY, word << 1);
+        sendSimpleCommand(CMD_BEGIN_PROGRAM);
+        /* config word must be write this way on 16f877a, min 8ms */
+        delayMicroseconds(10000);
+        readBack = sendReadCommand(CMD_READ_PROGRAM_MEMORY);
+        readBack = (readBack >> 1) & 0x3FFF;
+    } else if (addr != (configStart + DEV_CONFIG_WORD)) {
         word &= 0x3FFF;
         sendWriteCommand(CMD_LOAD_PROGRAM_MEMORY, word << 1);
         beginProgramCycle(addr, false);
@@ -1299,6 +1423,9 @@ bool writeWord(unsigned long addr, unsigned int word)
     }
     return readBack == word;
 }
+
+/*************************************************************************************************/
+
 // Force a word to be written even if it normally would protect config bits.
 bool writeWordForced(unsigned long addr, unsigned int word)
 {
@@ -1319,3 +1446,5 @@ bool writeWordForced(unsigned long addr, unsigned int word)
     }
     return readBack == word;
 }
+
+/*************************************************************************************************/
