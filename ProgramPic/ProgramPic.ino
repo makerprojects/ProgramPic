@@ -50,7 +50,7 @@
 #define DELAY_TDPROG 6000     // Time for a data memory write to complete
 #define DELAY_TERA 6000       // Time for a word erase to complete
 #define DELAY_TPROG5 1000     // Time for program write on FLASH5 systems
-#define DELAY_TFULLERA 50000  // Time for a full chip erase
+#define DELAY_TFULLERA 200000  // Time for a full chip erase
 #define DELAY_TFULL84 20000   // Intermediate wait for PIC16F84/PIC16F84A
 // Commands that may be sent to the device.
 #define CMD_LOAD_CONFIG 0x00          // Load (write) to config memory
@@ -499,6 +499,7 @@ int parseHex(const char *args, unsigned long *value)
         return 0;
     return size;
 }
+
 // Parse a range of addresses of the form START or START-END.
 bool parseRange(const char *args, unsigned long *start, unsigned long *end)
 {
@@ -519,6 +520,7 @@ bool parseRange(const char *args, unsigned long *start, unsigned long *end)
         return false;
     return *end >= *start;
 }
+
 bool parseCheckedRange(const char *args, unsigned long *start, unsigned long *end)
 {
     // Parse the basic values and make sure that start <= end.
@@ -540,6 +542,7 @@ bool parseCheckedRange(const char *args, unsigned long *start, unsigned long *en
     }
     return true;
 }
+
 // READ command.
 void cmdRead(const char *args)
 {
@@ -575,6 +578,7 @@ void cmdRead(const char *args)
     Serial.println();
     Serial.println(".");
 }
+
 // READBIN command.
 void cmdReadBinary(const char *args)
 {
@@ -617,6 +621,7 @@ void cmdReadBinary(const char *args)
     // Write the terminator (a zero-length packet).
     Serial.write((uint8_t)0x00);
 }
+
 const char s_force[] PROGMEM = "FORCE";
 // WRITE command.
 void cmdWrite(const char *args)
@@ -696,6 +701,7 @@ void cmdWrite(const char *args)
         Serial.println("OK");
     }
 }
+
 // Blocking serial read for use by WRITEBIN.
 int readBlocking()
 {
@@ -703,6 +709,7 @@ int readBlocking()
         ;  // Do nothing.
     return Serial.read();
 }
+
 // WRITEBIN command.
 void cmdWriteBinary(const char *args)
 {
@@ -798,6 +805,7 @@ void cmdWriteBinary(const char *args)
     }
     Serial.println("OK");
 }
+
 const char s_noPreserve[] PROGMEM = "NOPRESERVE";
 // ERASE command.
 void cmdErase(const char *args)
@@ -895,12 +903,14 @@ void cmdErase(const char *args)
     // Done.
     Serial.println("OK");
 }
+
 // PWROFF command.
 void cmdPowerOff(const char *args)
 {
     exitProgramMode();
     Serial.println("OK");
 }
+
 // List of all commands that are understood by the programmer.
 typedef void (*commandFunc)(const char *args);
 typedef struct {
@@ -909,6 +919,7 @@ typedef struct {
     const char PROGMEM *desc;
     const char PROGMEM *args;
 } command_t;
+
 const char s_cmdRead[] PROGMEM = "READ";
 const char s_cmdReadDesc[] PROGMEM = "Reads program and data words from device memory (text)";
 const char s_cmdReadArgs[] PROGMEM = "STARTADDR[-ENDADDR]";
@@ -951,6 +962,7 @@ const command_t commands[] PROGMEM
         { s_cmdVersion, cmdVersion, s_cmdVersionDesc, 0 },
         { s_cmdHelp, cmdHelp, s_cmdHelpDesc, 0 },
         { 0, 0 } };
+
 // "HELP" command.
 void cmdHelp(const char *args)
 {
@@ -975,6 +987,7 @@ void cmdHelp(const char *args)
     }
     Serial.println(".");
 }
+
 // Match a data-space string where the name comes from PROGMEM.
 bool matchString(const char PROGMEM *name, const char *str, int len)
 {
@@ -1088,6 +1101,7 @@ void exitProgramMode()
     state = STATE_IDLE;
     pc = 0;
 }
+
 // Send a command to the PIC.
 void sendCommand(byte cmd)
 {
@@ -1103,12 +1117,14 @@ void sendCommand(byte cmd)
         cmd >>= 1;
     }
 }
+
 // Send a command to the PIC that has no arguments.
 void sendSimpleCommand(byte cmd)
 {
     sendCommand(cmd);
     delayMicroseconds(DELAY_TDLY2);
 }
+
 // Send a command to the PIC that writes a data argument.
 void sendWriteCommand(byte cmd, unsigned int data)
 {
@@ -1196,6 +1212,7 @@ void setPC(unsigned long addr)
         ++pc;
     }
 }
+
 // Sets the PC for "erase mode", which is activated by loading the
 // data value 0x3FFF into location 0 of configuration memory.
 void setErasePC()
@@ -1268,6 +1285,7 @@ void beginProgramCycle(unsigned long addr, bool isData)
             break;
     }
 }
+
 // Write a word to memory (program, config, or data depending upon addr).
 // Returns true if the write succeeded, false if read-back failed to match.
 bool writeWord(unsigned long addr, unsigned int word)
@@ -1280,6 +1298,13 @@ bool writeWord(unsigned long addr, unsigned int word)
         beginProgramCycle(addr, true);
         readBack = sendReadCommand(CMD_READ_DATA_MEMORY);
         readBack = (readBack >> 1) & 0x00FF;
+    } else if ((addr >= configStart ) && (addr <= configEnd)){
+        word &= 0x3FFF;
+        sendWriteCommand(CMD_LOAD_PROGRAM_MEMORY, word << 1);
+        sendSimpleCommand(CMD_BEGIN_PROGRAM);
+        delayMicroseconds(10000); /* config word must be write this way on 16f877a */
+        readBack = sendReadCommand(CMD_READ_PROGRAM_MEMORY);
+        readBack = (readBack >> 1) & 0x3FFF;
     } else if (!configSave || addr != (configStart + DEV_CONFIG_WORD)) {
         word &= 0x3FFF;
         sendWriteCommand(CMD_LOAD_PROGRAM_MEMORY, word << 1);
@@ -1299,6 +1324,7 @@ bool writeWord(unsigned long addr, unsigned int word)
     }
     return readBack == word;
 }
+
 // Force a word to be written even if it normally would protect config bits.
 bool writeWordForced(unsigned long addr, unsigned int word)
 {
