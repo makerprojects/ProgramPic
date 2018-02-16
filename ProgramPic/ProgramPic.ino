@@ -16,6 +16,7 @@
 *
 *
 * Change log:
+* 02/15/18:  - improved support for 12F629, 630, 675, and 676. Bump version to 1.6
 * 02/10/18:  - reversed hernandi's changes for supporting pic16F877a and formatted source code to improve readabilty
 * 02/09/16:  - billy fixes for Arduino 1.6.7 compline test only. Bump version to 1.5
 * 01/30/16:  - added new mode to initiate programming for 16F87 and 16F88
@@ -102,7 +103,7 @@ byte dataFlashType = EEPROM;
 byte hpp_progEntryMode = MCLR_first; 
 
 // Program version
-const char s_Version[] = "1.5";
+const char s_Version[] = "1.6";
 
 // List of devices that are currently supported and their properties.
 // Note: most of these are based on published information and have not
@@ -149,10 +150,10 @@ struct deviceInfo {
 
 struct deviceInfo const devices[] PROGMEM = {
     // http://ww1.microchip.com/downloads/en/DeviceDoc/41191D.pdf
-    {s_pic12f629, 0x0F80, 1024, 0x2000, 0x2100, 8, 128, 1, 0x3000, FLASH4, EEPROM, MCLR_first},
-    {s_pic12f675, 0x0FC0, 1024, 0x2000, 0x2100, 8, 128, 1, 0x3000, FLASH4, EEPROM, MCLR_first},
-    {s_pic16f630, 0x10C0, 1024, 0x2000, 0x2100, 8, 128, 1, 0x3000, FLASH4, EEPROM, MCLR_first},
-    {s_pic16f676, 0x10E0, 1024, 0x2000, 0x2100, 8, 128, 1, 0x3000, FLASH4, EEPROM, MCLR_first},
+    {s_pic12f629, 0x0F80, 1024, 0x2000, 0x2100, 8, 128, 1, 0x3E00, FLASH4, EEPROM, MCLR_first},
+    {s_pic12f675, 0x0FC0, 1024, 0x2000, 0x2100, 8, 128, 1, 0x3E00, FLASH4, EEPROM, MCLR_first},
+    {s_pic16f630, 0x10C0, 1024, 0x2000, 0x2100, 8, 128, 1, 0x3E00, FLASH4, EEPROM, MCLR_first},
+    {s_pic16f676, 0x10E0, 1024, 0x2000, 0x2100, 8, 128, 1, 0x3E00, FLASH4, EEPROM, MCLR_first},
     
     // http://ww1.microchip.com/downloads/en/DeviceDoc/30262e.pdf
     {s_pic16f84, -1, 1024, 0x2000, 0x2100, 8, 64, 0, 0, FLASH, EEPROM, MCLR_first},
