@@ -16,6 +16,7 @@
 *
 *
 * Change log:
+* 02/17/18:  - integrated support for 16F877a by defining new FLASH8 type. Bump version to 1.7
 * 02/15/18:  - improved support for 12F629, 630, 675, and 676. Bump version to 1.6
 * 02/10/18:  - reversed hernandi's changes for supporting pic16F877a and formatted source code to improve readabilty
 * 02/09/16:  - billy fixes for Arduino 1.6.7 compline test only. Bump version to 1.5
@@ -53,6 +54,7 @@
 #define DELAY_TDPROG 6000 // Time for a data memory write to complete
 #define DELAY_TERA 6000 // Time for a word erase to complete
 #define DELAY_TPROG5 1000 // Time for program write on FLASH5 systems
+#define DELAY_TPROG8 8000 // Time for program write on FLASH8 systems
 #define DELAY_TFULLERA 50000 // Time for a full chip erase
 #define DELAY_TFULL84 20000 // Intermediate wait for PIC16F84/PIC16F84A
 
@@ -81,6 +83,7 @@ int state = STATE_IDLE;
 #define FLASH 1
 #define FLASH4 4
 #define FLASH5 5
+#define FLASH8 8
 
 // HPP programming entry modes
 #define MCLR_first 0
@@ -103,7 +106,7 @@ byte dataFlashType = EEPROM;
 byte hpp_progEntryMode = MCLR_first; 
 
 // Program version
-const char s_Version[] = "1.6";
+const char s_Version[] = "1.7";
 
 // List of devices that are currently supported and their properties.
 // Note: most of these are based on published information and have not
@@ -178,6 +181,9 @@ struct deviceInfo const devices[] PROGMEM = {
     
     // http://ww1.microchip.com/downloads/en/DeviceDoc/39025f.pdf
     {s_pic16f877, 0x09A0, 8192, 0x2000, 0x2100, 8, 256, 0, 0, FLASH4, EEPROM, MCLR_first},
+
+    // http://ww1.microchip.com/downloads/en/DeviceDoc/39589b.pdf
+    {s_pic16f877a, 0x0E20, 8192, 0x2000, 0x2100, 8, 256, 0, 0, FLASH8, EEPROM, Vdd_first},
 
     // http://ww1.microchip.com/downloads/en/DeviceDoc/41287D.pdf   
     {s_pic16f882, 0x2000, 2048, 0x2000, 0x2100, 9, 128, 0, 0, FLASH4, EEPROM, MCLR_first},
@@ -864,6 +870,7 @@ void cmdErase(const char *args) {
             sendSimpleCommand(CMD_BULK_ERASE_DATA);
             break;
         case FLASH5:
+        case FLASH8:
             setErasePC();
             sendSimpleCommand(CMD_CHIP_ERASE);
             break;
@@ -1319,6 +1326,16 @@ void beginProgramCycle(unsigned long addr, bool isData) {
             sendSimpleCommand(CMD_BEGIN_PROGRAM_ONLY);
             delayMicroseconds(DELAY_TPROG5);
             sendSimpleCommand(CMD_END_PROGRAM_ONLY);
+            break;
+        case FLASH8:
+            if (addr < configStart) {
+                sendSimpleCommand(CMD_BEGIN_PROGRAM_ONLY);
+                delayMicroseconds(DELAY_TPROG5);
+                sendSimpleCommand(CMD_END_PROGRAM_ONLY);
+            } else {
+                sendSimpleCommand(CMD_BEGIN_PROGRAM);
+                delayMicroseconds(DELAY_TPROG8);
+            }
             break;
     }
 }
