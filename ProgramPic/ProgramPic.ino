@@ -16,6 +16,7 @@
 *
 *
 * Change log:
+* 09/28/18:  - added functon prototype for matchString for compliation with IDE 1.8.7; bump version to 1.8
 * 02/17/18:  - integrated support for 16F877a by defining new FLASH8 type. Bump version to 1.7
 * 02/15/18:  - improved support for 12F629, 630, 675, and 676. Bump version to 1.6
 * 02/10/18:  - reversed hernandi's changes for supporting pic16F877a and formatted source code to improve readabilty
@@ -89,6 +90,14 @@ int state = STATE_IDLE;
 #define MCLR_first 0
 #define Vdd_first 1
 
+// Buffer for command-line character input and READBIN data packets.
+#define BINARY_TRANSFER_MAX 64
+#define BUFFER_MAX (BINARY_TRANSFER_MAX + 1)
+
+// Prototypes (as needed...)
+bool matchString(const char PROGMEM *name, const char *str, int len);
+
+
 unsigned long pc = 0; // Current program counter.
 
 // Flat address ranges for the various memory spaces. Defaults to the values
@@ -106,7 +115,7 @@ byte dataFlashType = EEPROM;
 byte hpp_progEntryMode = MCLR_first; 
 
 // Program version
-const char s_Version[] = "1.7";
+const char s_Version[] = "1.8";
 
 // List of devices that are currently supported and their properties.
 // Note: most of these are based on published information and have not
@@ -193,9 +202,7 @@ struct deviceInfo const devices[] PROGMEM = {
     {s_pic16f887, 0x2080, 8192, 0x2000, 0x2100, 9, 256, 0, 0, FLASH4, EEPROM, MCLR_first},
     {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 };
-// Buffer for command-line character input and READBIN data packets.
-#define BINARY_TRANSFER_MAX 64
-#define BUFFER_MAX (BINARY_TRANSFER_MAX + 1)
+
 char buffer[BUFFER_MAX];
 int buflen = 0;
 unsigned long lastActive = 0;
