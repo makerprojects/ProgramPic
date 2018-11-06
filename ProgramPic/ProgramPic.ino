@@ -16,6 +16,7 @@
 *
 *
 * Change log:
+* 11/06/18:  - added support for PIC12F683
 * 09/28/18:  - added functon prototype for matchString for compliation with IDE 1.8.7; bump version to 1.8
 * 02/17/18:  - integrated support for 16F877a by defining new FLASH8 type. Bump version to 1.7
 * 02/15/18:  - improved support for 12F629, 630, 675, and 676. Bump version to 1.6
@@ -124,6 +125,7 @@ const char s_Version[] = "1.8";
 // Please note that device names and device data are forced out into PROGMEM.
 const char s_pic12f629[] PROGMEM = "pic12f629";
 const char s_pic12f675[] PROGMEM = "pic12f675";
+const char s_pic12f683[] PROGMEM = "pic12f683";
 const char s_pic16f630[] PROGMEM = "pic16f630";
 const char s_pic16f676[] PROGMEM = "pic16f676";
 const char s_pic16f84[] PROGMEM = "pic16f84";
@@ -162,8 +164,10 @@ struct deviceInfo {
 
 struct deviceInfo const devices[] PROGMEM = {
     // http://ww1.microchip.com/downloads/en/DeviceDoc/41191D.pdf
+    // http://ww1.microchip.com/downloads/en/DeviceDoc/40001204J.pdf
     {s_pic12f629, 0x0F80, 1024, 0x2000, 0x2100, 8, 128, 1, 0x3E00, FLASH4, EEPROM, MCLR_first},
     {s_pic12f675, 0x0FC0, 1024, 0x2000, 0x2100, 8, 128, 1, 0x3E00, FLASH4, EEPROM, MCLR_first},
+    {s_pic12f683, 0x0460, 2048, 0x2000, 0x2100, 9, 256, 0, 0, FLASH4, EEPROM, MCLR_first},
     {s_pic16f630, 0x10C0, 1024, 0x2000, 0x2100, 8, 128, 1, 0x3E00, FLASH4, EEPROM, MCLR_first},
     {s_pic16f676, 0x10E0, 1024, 0x2000, 0x2100, 8, 128, 1, 0x3E00, FLASH4, EEPROM, MCLR_first},
     
