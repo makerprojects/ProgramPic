@@ -16,6 +16,9 @@
 *
 *
 * Change log:
+* 04/15/22:  - fix some chips by replacing configWord where only one configWord support,
+               added support "configuration word 2" programm/erase, added a lot of chips from datasheet,
+               added support for mid-range PIC12(L)F1822/PIC16(L)F1823. Bump version to 1.9
 * 11/05/20:  - added support for PIC16F688
 * 11/06/18:  - added support for PIC12F683
 * 09/28/18:  - added functon prototype for matchString for compliation with IDE 1.8.7; bump version to 1.8
@@ -107,6 +110,7 @@ unsigned long pc = 0; // Current program counter.
 unsigned long programEnd = 0x07FF;
 unsigned long configStart = 0x2000;
 unsigned long configEnd = 0x2007;
+unsigned long configSize = 8;
 unsigned long dataStart = 0x2100;
 unsigned long dataEnd = 0x217F;
 unsigned long reservedStart = 0x0800;
@@ -117,7 +121,7 @@ byte dataFlashType = EEPROM;
 byte hpp_progEntryMode = MCLR_first; 
 
 // Program version
-const char s_Version[] = "1.8";
+const char s_Version[] = "1.9";
 
 // List of devices that are currently supported and their properties.
 // Note: most of these are based on published information and have not
@@ -126,7 +130,6 @@ const char s_Version[] = "1.8";
 // Please note that device names and device data are forced out into PROGMEM.
 const char s_pic12f629[] PROGMEM = "pic12f629";
 const char s_pic12f675[] PROGMEM = "pic12f675";
-const char s_pic12f683[] PROGMEM = "pic12f683";
 const char s_pic16f630[] PROGMEM = "pic16f630";
 const char s_pic16f676[] PROGMEM = "pic16f676";
 const char s_pic16f84[] PROGMEM = "pic16f84";
@@ -138,8 +141,16 @@ const char s_pic16f627a[] PROGMEM = "pic16f627a";
 const char s_pic16f628[] PROGMEM = "pic16f628";
 const char s_pic16f628a[] PROGMEM = "pic16f628a";
 const char s_pic16f648a[] PROGMEM = "pic16f648a";
+const char s_pic16f631[] PROGMEM = "pic16f631";
+const char s_pic16f635[] PROGMEM = "pic16f635";
+const char s_pic16f636[] PROGMEM = "pic16f636/9";
+const char s_pic16f677[] PROGMEM = "pic16f677";
+const char s_pic16f683[] PROGMEM = "pic16f683";
 const char s_pic16f684[] PROGMEM = "pic16f684";
+const char s_pic16f685[] PROGMEM = "pic16f685";
+const char s_pic16f687[] PROGMEM = "pic16f687";
 const char s_pic16f688[] PROGMEM = "pic16f688";
+const char s_pic16f689[] PROGMEM = "pic16f689";
 const char s_pic16f690[] PROGMEM = "pic16f690";
 const char s_pic16f877[] PROGMEM = "pic16f877";
 const char s_pic16f877a[] PROGMEM = "pic16f877a";
@@ -148,6 +159,10 @@ const char s_pic16f883[] PROGMEM = "pic16f883";
 const char s_pic16f884[] PROGMEM = "pic16f884";
 const char s_pic16f886[] PROGMEM = "pic16f886";
 const char s_pic16f887[] PROGMEM = "pic16f887";
+const char s_pic12f1822[] PROGMEM = "pic12f1822";
+const char s_pic12lf1822[] PROGMEM = "pic12lf1822";
+const char s_pic16f1823[] PROGMEM = "pic16f1823";
+const char s_pic16lf1823[] PROGMEM = "pic16lf1823";
 
 struct deviceInfo {
     const char PROGMEM *name; // User-readable name of the device.
@@ -166,10 +181,8 @@ struct deviceInfo {
 
 struct deviceInfo const devices[] PROGMEM = {
     // http://ww1.microchip.com/downloads/en/DeviceDoc/41191D.pdf
-    // http://ww1.microchip.com/downloads/en/DeviceDoc/40001204J.pdf
     {s_pic12f629, 0x0F80, 1024, 0x2000, 0x2100, 8, 128, 1, 0x3E00, FLASH4, EEPROM, MCLR_first},
     {s_pic12f675, 0x0FC0, 1024, 0x2000, 0x2100, 8, 128, 1, 0x3E00, FLASH4, EEPROM, MCLR_first},
-    {s_pic12f683, 0x0460, 2048, 0x2000, 0x2100, 9, 256, 0, 0, FLASH4, EEPROM, MCLR_first},
     {s_pic16f630, 0x10C0, 1024, 0x2000, 0x2100, 8, 128, 1, 0x3E00, FLASH4, EEPROM, MCLR_first},
     {s_pic16f676, 0x10E0, 1024, 0x2000, 0x2100, 8, 128, 1, 0x3E00, FLASH4, EEPROM, MCLR_first},
     
@@ -189,14 +202,18 @@ struct deviceInfo const devices[] PROGMEM = {
     {s_pic16f628a, 0x1060, 2048, 0x2000, 0x2100, 8, 128, 0, 0, FLASH4, EEPROM, MCLR_first},
     {s_pic16f648a, 0x1100, 4096, 0x2000, 0x2100, 8, 256, 0, 0, FLASH4, EEPROM, MCLR_first},
     
-    // http://ww1.microchip.com/downloads/en/devicedoc/41202C.pdf
+    // https://ww1.microchip.com/downloads/en/DeviceDoc/40001204J.pdf
+    {s_pic16f631, 0x1420, 1024, 0x2000, 0x2100, 8, 128, 0, 0, FLASH4, EEPROM, MCLR_first},
+    {s_pic16f635, 0x0FA0, 1024, 0x2000, 0x2100, 8, 128, 0, 0, FLASH4, EEPROM, MCLR_first},
+    {s_pic16f636, 0x10A0, 2048, 0x2000, 0x2100, 8, 256, 0, 0, FLASH4, EEPROM, MCLR_first}, //this deviceId also used for pic16f639
+    {s_pic16f677, 0x1440, 2048, 0x2000, 0x2100, 8, 256, 0, 0, FLASH4, EEPROM, MCLR_first},
+    {s_pic16f683, 0x0460, 2048, 0x2000, 0x2100, 8, 256, 0, 0, FLASH4, EEPROM, MCLR_first},
     {s_pic16f684, 0x1080, 2048, 0x2000, 0x2100, 8, 256, 0, 0, FLASH4, EEPROM, MCLR_first},
-
-    // http://ww1.microchip.com/downloads/en/DeviceDoc/41203E.pdf
+    {s_pic16f685, 0x04A0, 4096, 0x2000, 0x2100, 8, 256, 0, 0, FLASH4, EEPROM, MCLR_first},
+    {s_pic16f687, 0x1320, 2048, 0x2000, 0x2100, 8, 256, 0, 0, FLASH4, EEPROM, MCLR_first},
     {s_pic16f688, 0x1180, 4096, 0x2000, 0x2100, 8, 256, 0, 0, FLASH4, EEPROM, MCLR_first},
-    
-    // http://ww1.microchip.com/downloads/en/DeviceDoc/41262A.pdf
-    {s_pic16f690, 0x1400, 4096, 0x2000, 0x2100, 9, 256, 1, 0, FLASH4, EEPROM, MCLR_first},
+    {s_pic16f689, 0x1340, 4096, 0x2000, 0x2100, 8, 256, 0, 0, FLASH4, EEPROM, MCLR_first},
+    {s_pic16f690, 0x1400, 4096, 0x2000, 0x2100, 8, 256, 0, 0, FLASH4, EEPROM, MCLR_first},
     
     // http://ww1.microchip.com/downloads/en/DeviceDoc/39025f.pdf
     {s_pic16f877, 0x09A0, 8192, 0x2000, 0x2100, 8, 256, 0, 0, FLASH4, EEPROM, MCLR_first},
@@ -210,6 +227,12 @@ struct deviceInfo const devices[] PROGMEM = {
     {s_pic16f884, 0x2040, 4096, 0x2000, 0x2100, 9, 256, 0, 0, FLASH4, EEPROM, MCLR_first},
     {s_pic16f886, 0x2060, 8192, 0x2000, 0x2100, 9, 256, 0, 0, FLASH4, EEPROM, MCLR_first},
     {s_pic16f887, 0x2080, 8192, 0x2000, 0x2100, 9, 256, 0, 0, FLASH4, EEPROM, MCLR_first},
+
+    // http://ww1.microchip.com/downloads/en/DeviceDoc/41390B.pdf
+    {s_pic12f1822, 0x2700, 2048, 0x8000, 0x1E000, 9, 256, 0, 0, FLASH4, EEPROM, MCLR_first},
+    {s_pic12lf1822, 0x2800, 2048, 0x8000, 0x1E000, 9, 256, 0, 0, FLASH4, EEPROM, MCLR_first},
+    {s_pic16f1823, 0x2720, 2048, 0x8000, 0x1E000, 9, 256, 0, 0, FLASH4, EEPROM, MCLR_first},
+    {s_pic16lf1823, 0x2820, 2048, 0x8000, 0x1E000, 9, 256, 0, 0, FLASH4, EEPROM, MCLR_first},
     {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 };
 
@@ -317,6 +340,7 @@ void initDevice(const struct deviceInfo *dev) {
     programEnd = pgm_read_dword(&(dev->programSize)) - 1;
     configStart = pgm_read_dword(&(dev->configStart));
     configEnd = configStart + pgm_read_word(&(dev->configSize)) - 1;
+    configSize = pgm_read_word(&(dev->configSize));
     dataStart = pgm_read_dword(&(dev->dataStart));
     dataEnd = dataStart + pgm_read_word(&(dev->dataSize)) - 1;
     reservedStart = programEnd - pgm_read_word(&(dev->reservedWords)) + 1;
@@ -363,7 +387,8 @@ void initDevice(const struct deviceInfo *dev) {
 #define DEV_USERID2 2
 #define DEV_USERID3 3
 #define DEV_ID 6
-#define DEV_CONFIG_WORD 7
+#define DEV_CONFIG_WORD1 7
+#define DEV_CONFIG_WORD2 8
 
 
 // DEVICE command.
@@ -376,7 +401,9 @@ void cmdDevice(const char *args) {
     unsigned int userid2 = readConfigWord(DEV_USERID2);
     unsigned int userid3 = readConfigWord(DEV_USERID3);
     unsigned int deviceId = readConfigWord(DEV_ID);
-    unsigned int configWord = readConfigWord(DEV_CONFIG_WORD);
+    unsigned int configWord1 = readConfigWord(DEV_CONFIG_WORD1);
+    unsigned int configWord2 = readConfigWord(DEV_CONFIG_WORD2);
+    
     // If the device ID is all-zeroes or all-ones, then it could mean
     // one of the following:
     //
@@ -401,12 +428,16 @@ void cmdDevice(const char *args) {
         userid2 = readConfigWord(DEV_USERID2);
         userid3 = readConfigWord(DEV_USERID3);
         deviceId = readConfigWord(DEV_ID);
-        configWord = readConfigWord(DEV_CONFIG_WORD);
+        configWord1 = readConfigWord(DEV_CONFIG_WORD1);
+        configWord2 = readConfigWord(DEV_CONFIG_WORD2);
        
         if (deviceId == 0 || deviceId == 0x3FFF) {
             // now we explore case 5...
             hpp_progEntryMode = MCLR_first; // swith order, might be another type
-            unsigned int word = userid0 | userid1 | userid2 | userid3 | configWord;
+            unsigned int word = userid0 | userid1 | userid2 | userid3 | configWord1;
+            if (configSize == 9) {
+                word |= configWord2;
+            }
             unsigned int addr = 0;
             while (!word && addr < 16) {
                 word |= readWord(addr);
@@ -454,7 +485,10 @@ void cmdDevice(const char *args) {
         dataFlashType = EEPROM;
     }
     Serial.print("ConfigWord: ");
-    printHex4(configWord);
+    printHex4(configWord1);
+    if (configSize == 9) {
+        printHex4(configWord2);
+    }
     Serial.println();
     Serial.println(".");
     // Don't need programming mode once the details have been read.
@@ -854,7 +888,8 @@ void cmdErase(const char *args) {
     bool preserve = !matchString(s_noPreserve, args, len);
     // Preserve reserved words if necessary.
     unsigned int *reserved = 0;
-    unsigned int configWord = 0x3FFF;
+    unsigned int configWord1 = 0x3FFF;
+    unsigned int configWord2 = 0x3FFF;
     if (preserve && reservedStart <= reservedEnd) {
         size_t size = ((size_t)(reservedEnd - reservedStart + 1))
         * sizeof(unsigned int);
@@ -875,8 +910,12 @@ void cmdErase(const char *args) {
     }
     if (configSave != 0 && preserve) {
         // Some of the bits in the configuration word must also be saved.
-        configWord &= ~configSave;
-        configWord |= readWord(configStart + DEV_CONFIG_WORD) & configSave;
+        configWord1 &= ~configSave;
+        configWord1 |= readWord(configStart + DEV_CONFIG_WORD1) & configSave;
+        if (configSize == 9) {
+            configWord2 &= ~configSave;
+            configWord2 |= readWord(configStart + DEV_CONFIG_WORD2) & configSave;
+        }
     }
     // Perform the memory type specific erase sequence.
     switch (progFlashType) {
@@ -936,9 +975,14 @@ void cmdErase(const char *args) {
     // Forcibly write 0x3FFF over the configuration words as erase
     // sometimes won't reset the words (e.g. PIC16F628A). If the  
     // write fails, then leave the words as-is - don't report the failure.
-    for (unsigned long configAddr = configStart + DEV_CONFIG_WORD;
+    for (unsigned long configAddr = configStart + DEV_CONFIG_WORD1;
         configAddr <= configEnd; ++configAddr)
-    writeWordForced(configAddr, configWord);
+    writeWordForced(configAddr, configWord1);
+    if (configSize == 9) {
+        for (unsigned long configAddr = configStart + DEV_CONFIG_WORD2;
+            configAddr <= configEnd; ++configAddr)
+        writeWordForced(configAddr, configWord2);
+    }
     // Done.
     Serial.println("OK");
 }
@@ -1369,7 +1413,7 @@ bool writeWord(unsigned long addr, unsigned int word) {
         beginProgramCycle(addr, true);
         readBack = sendReadCommand(CMD_READ_DATA_MEMORY);
         readBack = (readBack >> 1) & 0x00FF;
-    } else if (!configSave || addr != (configStart + DEV_CONFIG_WORD)) {
+    } else if (!configSave || (addr != (configStart + DEV_CONFIG_WORD1) || addr != (configStart + DEV_CONFIG_WORD2))) {
         word &= 0x3FFF;
         sendWriteCommand(CMD_LOAD_PROGRAM_MEMORY, word << 1);
         beginProgramCycle(addr, false);
